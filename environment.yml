@@ -1,0 +1,28 @@
+name: sptk
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - click
+  - ipykernel
+  - ipython
+  - jupyter
+  - jupyterlab
+  - matplotlib
+  - notebook
+  - numpy
+  - openssl
+  - pandas
+  - pillow
+  - pip
+  - pyopenssl
+  - pyqt
+  - python=3.10.8
+  - scikit-learn
+  - scipy
+  - seaborn
+  - statsmodels
+  - tabulate
+  - pip:
+      - pyqt5-sip
+      - pysptools

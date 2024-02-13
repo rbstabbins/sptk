@@ -10,9 +10,9 @@ from datetime import date
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from sptk.config import OUTPUT_DIRECTORY, PACKAGE_DIRECTORY, WVLS, SAMPLE_RES
-from sptk.material_collection import HEADER_LIST, MaterialCollection
-from sptk.instrument import Instrument
+from config import OUTPUT_DIRECTORY, PACKAGE_DIRECTORY, WVLS, SAMPLE_RES
+from material_collection import HEADER_LIST, MaterialCollection
+from instrument import Instrument
 from test_instrument import build_test_instrument
 from test_data import generate_test_spectral_library
 

@@ -3,7 +3,7 @@ name = "sptk"
 
 version = "0.1"
 
-description = "The Spectral Parameters Toolkit (SPTK), a Python package for exploring the ability of a reflectance spectroscopy instrument to discriminate between materials."
+description = "The Spectral Parameters Toolkit (SPTK) is a Python package for investigating the ability of a multispectral imaging system to identify distinct materials and material groups through differences in reflectance spectra."
 
 readme = "README.md" # Optional
 

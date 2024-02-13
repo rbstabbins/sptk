@@ -1,0 +1,99 @@
+[project]
+name = "sptk" 
+
+version = "0.1"
+
+description = "The Spectral Parameters Toolkit (SPTK), a Python package for exploring the ability of a reflectance spectroscopy instrument to discriminate between materials."
+
+readme = "README.md" # Optional
+
+requires-python = ">=3.10"
+
+license = {file = "LICENSE.md"}
+
+# This field adds keywords for your project which will appear on the
+# project page. What does your project relate to?
+#
+# Note that this is a list of additional keywords, separated
+# by commas, to be used to assist searching for the distribution in a
+# larger catalog.
+keywords = ["reflectance", "spectroscopy", "spectral imaging", "planetary surfaces", "remote sensing", "spectral parameters"]
+
+authors = [
+  {name = "Roger Stabbins", email = "r.stabbins@nhm.ac.uk" }
+]
+
+maintainers = [
+   {name = "Roger Stabbins", email = "r.stabbins@nhm.ac.uk" }
+]
+
+# Classifiers help users find your project by categorizing it.
+#
+# For a list of valid classifiers, see https://pypi.org/classifiers/
+classifiers = [ 
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Researchers",
+  "Topic :: Planetary Science :: Reflectance Spectroscopy",
+  "License :: OSI Approved :: MIT License",
+
+  # Specify the Python versions you support here. In particular, ensure
+  # that you indicate you support Python 3. These classifiers are *not*
+  # checked by "pip install". See instead "python_requires" below.
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+]
+
+# This field lists other packages that your project depends on to run.
+# Any package you put here will be installed by pip when your project is
+# installed, so they must be valid existing projects.
+#
+# For an analysis of this field vs pip's requirements files see:
+# https://packaging.python.org/discussions/install-requires-vs-requirements/
+dependencies = [ # Optional
+  "click",
+  "ipykernel",
+  "ipython",
+  "jupyter",
+  "jupyterlab",
+  "matplotlib",
+  "notebook",
+  "numpy",
+  "openssl",
+  "pandas",
+  "pillow",
+  "pip",
+  "pyopenssl",
+  "pyqt",
+  "python=3.10.8",
+  "scikit-learn",
+  "scipy",
+  "seaborn",
+  "statsmodels",
+  "tabulate",
+  "pyqt5-sip",
+  "pysptools"
+]
+
+dev = ["check-manifest"]
+test = ["coverage"]
+
+# List URLs that are relevant to your project
+#
+# This field corresponds to the "Project-URL" and "Home-Page" metadata fields:
+# https://packaging.python.org/specifications/core-metadata/#project-url-multiple-use
+# https://packaging.python.org/specifications/core-metadata/#home-page-optional
+#
+# Examples listed include a pattern for specifying where the package tracks
+# issues, where the source is hosted, where to say thanks to the package
+# maintainers, and where to support the project financially. The key is
+# what's used to render the link text on PyPI.
+[project.urls]  # Optional
+"Homepage" = "https://github.com/rbstabbins/sptk"
+"Bug Reports" = "https://github.com/rbstabbins/sptk/issues"
+"Source" = "https://github.com/rbstabbins/sptk"
+
+[tool.setuptools]
+
+[build-system]
+requires = ["setuptools>=43.0.0", "wheel"]
+build-backend = "setuptools.build_meta"

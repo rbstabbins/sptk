@@ -1,6 +1,8 @@
+/.vscode
 /.DS_Store
 /data
 /dist
-/.vscode
+/notebooks
+/projects
 /tests/__pycache__
 /src/sptk/__pycache__

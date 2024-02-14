@@ -14,7 +14,7 @@ from typing import Union
 import numpy.polynomial.polynomial as poly
 import numpy as np
 import pandas as pd
-from sptk.config import PACKAGE_DIRECTORY, SAMPLE_RES
+from sptk.config import DATA_DIRECTORY, SAMPLE_RES
 
 def generate_test_spectral_library(
         flat_target: float=None,
@@ -66,7 +66,7 @@ def generate_test_spectral_library(
     if isinstance(n_samples, int):
         n_samples = {'test_target': n_samples, 'test_background': n_samples}
 
-    root_dir = Path(PACKAGE_DIRECTORY / '..' / 'data' / 'spectral_library' / 'test_library')
+    root_dir = Path(DATA_DIRECTORY / 'spectral_library' / 'test_library')
     for clss in classes:
         dir_clss = Path(root_dir / clss)
         if Path.exists(dir_clss):

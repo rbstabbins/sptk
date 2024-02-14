@@ -118,13 +118,12 @@ class Instrument():
         """
         # get allowed instrument names from the list of existing instrument
         # files in the sptk distribution
-        search_str = str(cfg.PACKAGE_DIRECTORY / '..' /
-                         'data' / 'instruments' / '*csv')
+        search_str = str(cfg.DATA_DIRECTORY / 'instruments' / '*csv')
         inst_files = glob.glob(search_str)
         allowed_names = [osp.splitext(osp.basename(i))[0] for i in inst_files]
         if name not in allowed_names:
             raise ValueError(f'{name} is not in the instrument directory.')
-        inst_file = Path(cfg.PACKAGE_DIRECTORY / '..' / 'data' /'instruments',
+        inst_file = Path(cfg.DATA_DIRECTORY / 'instruments',
                                                 name).with_suffix('.csv')
         inst_data = pd.read_csv(inst_file, index_col=0)
         return inst_data
@@ -507,7 +506,7 @@ class InstrumentBuilder:
         :param inst_df: channel cwls and fwhms of instrument
         :type inst_df: pd.DataFrame
         """
-        inst_dir = Path(cfg.PACKAGE_DIRECTORY / '..' / 'data' / 'instruments')
+        inst_dir = Path(cfg.DATA_DIRECTORY / 'instruments')
         filepath = Path(inst_dir, f'{self.name}').with_suffix('.csv')
         print(f"Exporting instrument to {filepath}...")
         inst_df.to_csv(filepath, index=False)

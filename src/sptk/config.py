@@ -40,9 +40,8 @@ LEGEND_S = 6
 """Exports"""
 EXPORT_DF = True
 LOAD_EXISTING = True # if True load existing directories, else build new
-PACKAGE_DIRECTORY = Path(os.path.dirname(os.path.realpath(__file__)))
-OUTPUT_DIRECTORY = Path(PACKAGE_DIRECTORY.parent.parent,
-                        'spectral_parameters_studies')
+DATA_DIRECTORY = Path('..', 'data') # to be updated during script running
+OUTPUT_DIRECTORY = Path('..', 'projects')
 
 def build_project_directory(
         project_name: str,
@@ -80,19 +79,19 @@ def build_project_directory(
 
     return project_dir, project_name
 
-def resolve_path(path: Path, root: str='package') -> Path:
-    """Resolve a path relative to the package or output directory.
+def resolve_path(path: Path, root: str='data') -> Path:
+    """Resolve a path relative to the data or output directory.
 
     :param path: Path to resolve
     :type path: Path
-    :param root: Root is for pacakage or output directory, defaults to 'package'
+    :param root: Root is for data or output directory, defaults to 'data'
     :type root: str, optional
     :return: Complete resolved path
     :rtype: Path
     """
-    if root == 'package':
-        return PACKAGE_DIRECTORY / path
+    if root == 'data':
+        return DATA_DIRECTORY / path
     elif root == 'output':
         return OUTPUT_DIRECTORY / path
     else:
-        raise ValueError('root must be "package" or "output"')
+        raise ValueError('root must be "data" or "output"')

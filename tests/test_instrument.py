@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from sptk.instrument import InstrumentBuilder
 from sptk.instrument import Instrument
-from sptk.config import PACKAGE_DIRECTORY, SAMPLE_RES, WVLS
+from sptk.config import DATA_DIRECTORY, SAMPLE_RES, WVLS
 
 def build_test_instrument(use_config_spectral_range: bool = False):
     instrument_name = 'test'
@@ -57,7 +57,7 @@ class TestInstrument(unittest.TestCase):
 
         pd.testing.assert_frame_equal(result, expected)
 
-        test_file = Path(PACKAGE_DIRECTORY / '..' / 'data' / 'instruments' /
+        test_file = Path(DATA_DIRECTORY / 'instruments' /
                                         test_name).with_suffix('.csv')
         os.remove(test_file)
 
@@ -298,7 +298,7 @@ class TestInstrumentBuilder(unittest.TestCase):
         """Testing export_instrument function
         """
         name = build_test_instrument()
-        expected_file = Path(PACKAGE_DIRECTORY / '..' / 'data' / 'instruments' /
+        expected_file = Path(DATA_DIRECTORY / 'instruments' /
                                                     name).with_suffix('.csv')
 
         self.assertEqual(os.path.exists(expected_file), True)

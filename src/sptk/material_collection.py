@@ -168,13 +168,13 @@ class MaterialCollection():
         :return: Dictionary mapping class labels to lists of entry filepaths
         :rtype: dict
         """
-        data_dir = Path('..', 'data' )
+        data_dir = cfg.DATA_DIRECTORY
         if spectral_library is None:
             data_library = Path(data_dir, 'spectral_library')
         else:
             data_library = Path(data_dir, 'spectral_library', spectral_library)
 
-        data_library_exists = os.path.isdir(cfg.resolve_path(data_library, root='package'))
+        data_library_exists = os.path.isdir(cfg.resolve_path(data_library, root='data'))
         if not data_library_exists:
             raise FileNotFoundError(
                 errno.ENOENT, os.strerror(errno.ENOENT), str(data_library))
@@ -206,8 +206,8 @@ class MaterialCollection():
                 #             for entry_file in entry_files], [])
                 # expand the filenames into list, but relative to the package
                 for entry_file in entry_files:
-                    file_list = glob.glob(str(cfg.resolve_path(entry_file, root='package')))
-                    file_list = [os.path.relpath(file, cfg.PACKAGE_DIRECTORY) for file in file_list]
+                    file_list = glob.glob(str(cfg.resolve_path(entry_file, root='data')))
+                    file_list = [os.path.relpath(file, cfg.DATA_DIRECTORY) for file in file_list]
                     cat_entries = cat_entries + file_list
 
             entry_dict[cat] = sorted(cat_entries)
@@ -317,7 +317,7 @@ class MaterialCollection():
         :return: material reflectance data and metadata
         :rtype: pd.DataFrame
         """
-        resolved_filepath = cfg.resolve_path(filepath, root='package')
+        resolved_filepath = cfg.resolve_path(filepath, root='data')
         mtrl_in = pd.read_csv(resolved_filepath,
                               header=None,
                               index_col=0,

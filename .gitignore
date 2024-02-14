@@ -1,3 +1,6 @@
 /.DS_Store
+/data
 /dist
 /.vscode
+/tests/__pycache__
+/src/sptk/__pycache__

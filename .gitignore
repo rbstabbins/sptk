@@ -2,7 +2,9 @@
 /.DS_Store
 /data
 /dist
+/examples/.DS_Store
 /notebooks
 /projects
+/src/.DS_Store
 /tests/__pycache__
 /src/sptk/__pycache__

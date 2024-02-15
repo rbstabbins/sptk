@@ -5,14 +5,18 @@ Part of the Spectral Parameters Toolkit
 Author: Roger Stabbins, NHM
 Date: 28-09-2022
 """
+import os
 import unittest
 import numpy as np
 import pandas as pd
 from sptk.observation import Observation
 from sptk.instrument import Instrument
 from sptk.material_collection import MaterialCollection
-from test_instrument import build_test_instrument
-from test_material_collection import generate_test_spectral_library
+from test_instrument import build_test_instrument, delete_test_instrument
+from test_material_collection import generate_test_spectral_library, delete_test_spectral_library
+
+test_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(test_dir)
 
 def generate_test_objects(n_samples: int = 1):
     # build test data
@@ -38,13 +42,14 @@ def generate_test_objects(n_samples: int = 1):
     test_inst_name = build_test_instrument(use_config_spectral_range=True)
     test_inst = Instrument(
                     test_inst_name,
+                    'test',
                     load_existing=False,
                     plot_profiles=False,
                     export_df=False)
     return test_data, test_matcol, test_inst
 
 class TestObservation(unittest.TestCase):
-    """Class to test the Observation2 class
+    """Class to test the Observation class
     """
 
     def test_init(self):
@@ -56,8 +61,12 @@ class TestObservation(unittest.TestCase):
                                 test_inst,
                                 load_existing= False,
                                 plot_profiles=False,
-                                export_df=False)
-        # make expected observation object
+                                export_df=False)        
+        
+        # TODO tests for Observation
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
 
     def test_build_new_observation(self):
         """Testing the build_new_observation function.
@@ -74,7 +83,11 @@ class TestObservation(unittest.TestCase):
         with self.subTest('Data ID'):
             expected = test_matcol.main_df.index
             result = test_main_df.index
-            pd.testing.assert_index_equal(result, expected)
+            pd.testing.assert_index_equal(result, expected)   
+
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_matcol.__del__(rmproj=True)     
 
     def test_add_shot_noise(self):
         """Testing add_noise in shot mode.
@@ -122,6 +135,11 @@ class TestObservation(unittest.TestCase):
             result = cat_df[test_obs.wvls].mean().mean()
             self.assertAlmostEqual(result, expected.values[0], delta=noise*0.1)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_get_refl_df(self):
         """Testing get_refl_df function for category and mineral selection.
         """
@@ -159,6 +177,11 @@ class TestObservation(unittest.TestCase):
             expected = [entry['Data ID'] for entry in test_data]
             self.assertListEqual(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     """RMSE Tests
     """
 
@@ -183,6 +206,11 @@ class TestObservation(unittest.TestCase):
 
         np.testing.assert_allclose(result_ma, expected_ma)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_compute_rmse(self):
         """Testing the compute_rmse function.
         """
@@ -198,6 +226,11 @@ class TestObservation(unittest.TestCase):
         result = test_obs.compute_rmse().to_numpy()
         expected = np.array([0.0, 0.0])
         np.testing.assert_array_almost_equal(result, expected, decimal=7)
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
 
     """Statistics Tests
     """
@@ -224,6 +257,11 @@ class TestObservation(unittest.TestCase):
             result = np.diagonal(corr_matrix.to_numpy())
             np.testing.assert_array_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_channel_pca(self):
         """Testing the channel_pca function.
         """
@@ -245,6 +283,11 @@ class TestObservation(unittest.TestCase):
             result = pca_matrix.drop('Category',axis=1).shape
             self.assertTupleEqual(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_channel_lda(self):
         """Testing the channel_lda function.
         """
@@ -265,6 +308,11 @@ class TestObservation(unittest.TestCase):
             expected = (expected_nrows, expected_ncols)
             result = lda_matrix.drop('Category',axis=1).shape
             self.assertTupleEqual(result, expected)
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

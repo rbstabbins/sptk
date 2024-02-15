@@ -123,5 +123,11 @@ def generate_test_spectral_library(
             series.to_csv(file_out, header=False)
     return entry_list
 
+def delete_test_spectral_library():
+    """Delete the test spectral library"""
+    root_dir = Path(DATA_DIRECTORY / 'spectral_library' / 'test_library')
+    if Path.exists(root_dir):
+        shutil.rmtree(root_dir)
+
 if __name__ == '__main__':
     coef_dict_test = generate_test_spectral_library(flat_background=0.25, flat_target=0.75)

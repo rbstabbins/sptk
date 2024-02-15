@@ -79,16 +79,33 @@ class Instrument():
             toc = time.perf_counter()
             print(f"Instrument built in {toc - tic:0.4f} seconds.")
 
-    def __del__(self, rmdir: bool = False) -> None:
-        """Instrument Destructor object - optionally deletes project folder
+    def __del__(self, rmdir: bool = False, rmproj: bool = False) -> None:
+        """Instrument Destructor method - optionally deletes
+        instrument directory and/or entire project directory
+
+        :param rmdir: instruct removal of instrument directory,
+            defaults to False
+        :type rmdir: bool, optional
+        :param rmproj: instruct removal of entire project directory,
+            defaults to False
+        :type rmproj: bool, optional
         """
         if rmdir:
-            print("Deleting % r Instrument directory..." % self.name)
+            name = self.name
+            print(f"Deleting {name} Instrument directory...")
             try:
                 rmtree(Path(self.project_dir, 'instrument'))
-                print("% r Instrument directory deleted." % self.name)
+                print(f"{name} Instrument directory deleted.")
             except FileNotFoundError:
-                print("No % r Instrument directory to delete." % self.name)
+                print(f"No {name} Instrument directory to delete.")
+        if rmproj:
+            name = self.project_name
+            print(f"Deleting {name} directory...")
+            try:
+                rmtree(Path(self.project_dir))
+                print(f"{name} directory deleted.")
+            except FileNotFoundError:
+                print(f"No {name} directory to delete.")
 
     def build_new_instrument(self,
             plot_profiles: bool = cfg.PLOT_PROFILES,

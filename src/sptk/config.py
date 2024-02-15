@@ -8,7 +8,6 @@ Part of the Spectral Parameters Toolkit
 Author: Roger Stabbins, NHM
 Date: 18-05-2022
 """
-
 import os
 from pathlib import Path
 from typing import Tuple
@@ -40,7 +39,7 @@ LEGEND_S = 6
 """Exports"""
 EXPORT_DF = True
 LOAD_EXISTING = True # if True load existing directories, else build new
-DATA_DIRECTORY = Path('..', 'data') # to be updated during script running
+DATA_DIRECTORY = Path('..', 'data')
 OUTPUT_DIRECTORY = Path('..', 'projects')
 
 def build_project_directory(

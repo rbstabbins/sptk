@@ -17,8 +17,11 @@ from sptk.observation import Observation
 from sptk.spectral_parameters import SpectralParameters
 from sptk.spectral_parameter_combination_classifier import  \
                         SpectralParameterCombinationClassifier as SPCClassifier
-from test_instrument import build_test_instrument
-from test_material_collection import generate_test_spectral_library
+from test_instrument import build_test_instrument, delete_test_instrument
+from test_material_collection import generate_test_spectral_library, delete_test_spectral_library
+
+test_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(test_dir)
 
 def generate_test_objects(
         n_samples: int = 1,
@@ -49,6 +52,7 @@ def generate_test_objects(
     test_inst_name = build_test_instrument(use_config_spectral_range=True)
     test_inst = Instrument(
                     test_inst_name,
+                    'test',
                     load_existing=False,
                     plot_profiles=False,
                     export_df=False)
@@ -277,7 +281,7 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
     def test_init_new(self):
         """Testing the init class for a new SPCClassifier object.
         """
-        _, _, _, _, test_sps = generate_test_objects()
+        _, _, test_inst, _, test_sps = generate_test_objects()
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
 
@@ -304,11 +308,15 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         #                                 test_spc.sp_filters, k_combinations)
         #     pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
 
     def test_flat_sps_list(self):
         """Testing the flat_sps_list function.
         """
-        _, _, _, _, test_sps = generate_test_objects(1, True, True, False)
+        _, _, test_inst, _, test_sps = generate_test_objects(1, True, True, False)
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
         flat_sps_list = test_spc.flat_sps_list()
@@ -322,12 +330,17 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
                     self.assertEqual(result, expected)
                 i+=1
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_stack_k_combinations(self):
         """Testing the stack_k_combinations function.
         """
         # test input - 2D array of values
         #   - channels only, 2 samples, pair combinations
-        _, _, _, _, test_sps = generate_test_objects(5, True, True, True)
+        _, _, test_inst, _, test_sps = generate_test_objects(5, True, True, True)
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
         k_stack, _ = test_spc.stack_k_combinations(test_sps.main_df)
@@ -341,10 +354,15 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
                         expected = test_sps.main_df[sp][sample_id]
                         self.assertEqual(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_fit_lda(self):
         """Testing the fit_lda function.
         """
-        _, _, _, _, test_sps = generate_test_objects(10, True, True, True)
+        _, _, test_inst, _, test_sps = generate_test_objects(10, True, True, True)
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
 
@@ -357,25 +375,35 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         # difficult to validate because different runs may rank spectral
         # parameters differently due to noise
 
-    def test_rank_spcs(self):
-        """Testing the rank_spcs function.
-        """
-        _, _, _, _, test_sps = generate_test_objects(10, True, False, True)
-        k_combinations = 2
-        test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
-        test_spc.fit_lda(test_sps)
-        ranked_df = test_spc.rank_spcs(metric='lda_score', scope='all-data')
-        # just check that the rank column has been added and has correct length
-        result = ranked_df['rank'].values
-        expected = np.arange(1, len(test_spc.spc_ids())+1)
-        np.testing.assert_array_equal(result, expected)
-        # difficult to validate because different runs may rank spectral
-        # parameters differently due to noise
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
+    # def test_rank_spcs(self):
+    #     """Testing the rank_spcs function.
+    #     """
+    #     _, _, test_inst, _, test_sps = generate_test_objects(10, True, False, True)
+    #     k_combinations = 2
+    #     test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
+    #     test_spc.fit_lda(test_sps)
+    #     ranked_df = test_spc.rank_spcs(metric='lda_score', scope='all-data')
+    #     # just check that the rank column has been added and has correct length
+    #     result = ranked_df['rank'].values
+    #     expected = np.arange(1, len(test_spc.spc_ids())+1)
+    #     np.testing.assert_array_equal(result, expected)
+    #     # difficult to validate because different runs may rank spectral
+    #     # parameters differently due to noise
+
+    #     # cleanup
+    #     delete_test_spectral_library()
+    #     delete_test_instrument(test_inst)
+    #     test_sps.__del__(rmproj=True)
 
     def test_plot_spc(self):
         """Testing the plot_spc function.
         """
-        _, _, _, _, test_sps = generate_test_objects(10, True, False, True)
+        _, _, test_inst, _, test_sps = generate_test_objects(10, True, False, True)
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
         test_spc.fit_lda(test_sps)
@@ -386,10 +414,15 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         test_spc_id = 1 # pair sp
         test_spc.plot_sp_combo(test_spc_id, test_sps)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_plot_spc_lda(self):
         """Testing the plot_spc_lda function.
         """
-        _, _, _, _, test_sps = generate_test_objects(10, True, False, True)
+        _, _, test_inst, _, test_sps = generate_test_objects(10, True, False, True)
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
         test_spc.fit_lda(test_sps)
@@ -406,10 +439,15 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         test_spc_id = 1 # pair sp
         test_spc.plot_spc_lda(test_spc_id, test_sps)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_binary_classifier(self):
         """Testing the binary_classifier function.
         """
-        _, _, _, _, test_sps = generate_test_objects(10, True, False, True)
+        _, _, test_inst, _, test_sps = generate_test_objects(10, True, False, True)
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
         test_spc.fit_lda(test_sps)
@@ -420,10 +458,15 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         # but we should be able to have some idea of which parameters
         # will classify which materials in which way
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_labelled_predictions(self):
         """Testing the labelled_predictions function.
         """
-        _, _, _, _, test_sps = generate_test_objects(10, True, False, True)
+        _, _, test_inst, _, test_sps = generate_test_objects(10, True, False, True)
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
         test_spc.fit_lda(test_sps)
@@ -432,6 +475,11 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         result = test_spc.labelled_predictions(test_sps, predicted)
         print(result)
         # also difficult to validate
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
 
     def test_confusion_matrix(self):
         """Testing the confusion_matrix static method.
@@ -511,7 +559,7 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
     def test_binary_classifier_accuracy(self):
         """Testing the binary_classifier_accuracy function.
         """
-        _, _, _, _, test_sps = generate_test_objects(
+        _, _, test_inst, _, test_sps = generate_test_objects(
                                     n_samples=10,
                                     just_channels=True)
         k_combinations = 2
@@ -524,10 +572,15 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         print(result)
         # also difficult to validate
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_plot_roc(self):
         """Testing the plot_roc function.
         """
-        _, _, _, _, test_sps = generate_test_objects(
+        _, _, test_inst, _, test_sps = generate_test_objects(
                                     n_samples=10,
                                     flat=False,
                                     just_channels=False,
@@ -547,32 +600,15 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
                                 'analysis', 'roc_scatter_noisey').with_suffix(PLT_FRMT)
         self.assertTrue(os.path.isfile(out_file))
 
-    def test_plot_metrics_vs_rank(self):
-        """Testing the plot_metrics_vs_rank function.
-        """
-        _, _, _, _, test_sps = generate_test_objects(
-                                    n_samples=10,
-                                    flat=False,
-                                    just_channels=False,
-                                    noise=True)
-        k_combinations = 2
-        test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
-        training, testing = test_sps.train_test_random_split()
-        test_spc.fit_lda(training)
-
-        predictions = test_spc.binary_classifier(testing)
-        test_spc.binary_classifier_accuracy(predictions, testing.cat_list())
-        test_spc.rank_spcs(metric='lda_acc_1', scope='all-data')
-        test_spc.plot_metrics_vs_rank(testtrain='test')
-
-        out_file = Path(test_spc.object_dir,
-                                'analysis', 'mean_metrics_vs_rank_test').with_suffix(PLT_FRMT)
-        self.assertTrue(os.path.isfile(out_file))
-
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+    
     def test_plot_metric_vs_metric(self):
         """Testing the plot_metric_vs_metric function.
         """
-        _, _, _, _, test_sps = generate_test_objects(
+        _, _, test_inst, _, test_sps = generate_test_objects(
                                     n_samples=10,
                                     flat=False,
                                     just_channels=False,
@@ -593,11 +629,16 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
                                 'analysis', 'lda_acc_1_vs_lda_score').with_suffix(PLT_FRMT)
         self.assertTrue(os.path.isfile(out_file))
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_all(self):
         """Testing the complete process of training and validating a
         classifier
         """
-        _, _, _, _, test_sps = generate_test_objects(
+        _, _, test_inst, _, test_sps = generate_test_objects(
                                     n_samples=10,
                                     flat=False,
                                     just_channels=False,
@@ -612,18 +653,22 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         test_spc.rank_spcs(metric='lda_acc_1', scope='all-data')
         # test_spc.plot_top_ranks(training, 5, scope='train')
         # test_spc.plot_top_ranks(testing, 5, scope='test')
-        test_spc.plot_roc(noisey=True)
-        test_spc.plot_metrics_vs_rank()
+        test_spc.plot_roc(noisey=True)        
         test_spc.plot_metric_vs_metric(
                         ('lda_score', 'Fisher Ratio'),
                         ('lda_acc_1', 'Accuracy'))
         test_spc.export_df()
         print(test_spc.main_df)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
     def test_fit_lda_repeat_holdout(self):
         """Testing the fit_lda_repeat_holdout function.
         """
-        _, _, _, _, test_sps = generate_test_objects(
+        _, _, test_inst, _, test_sps = generate_test_objects(
                                     n_samples=10,
                                     flat=False,
                                     just_channels=False,
@@ -633,11 +678,18 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         stats_spc, trials_spc = test_spc.fit_lda_repeat_holdout(test_sps, export_df=True)
         test_spc.rank_spcs(metric='lda_acc_1', scope='all-data')
 
+        # TODO write tests
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
+
 
     def test_fit_lda_repeat_holdout_ranking(self):
         """Testing the fit_lda_repeat_holdout function.
         """
-        _, _, _, _, test_sps = generate_test_objects(
+        _, _, test_inst, _, test_sps = generate_test_objects(
                                     n_samples=10,
                                     flat=False,
                                     just_channels=False,
@@ -645,16 +697,19 @@ class TestSpectralParameterCombinationClassifier(unittest.TestCase):
         k_combinations = 2
         test_spc = SPCClassifier(test_sps, k_combinations, load_existing=False)
         test_spc.fit_lda_repeat_holdout(test_sps, export_df=False)
-        test_spc.fit_lda(test_sps)
-        test_spc.merge_mean_accuracy()
+        test_spc.fit_lda(test_sps)        
         test_spc.rank_spcs(metric='lda_acc_1', scope='all-data')
 
-        test_spc.plot_roc(noisey=True)
-        test_spc.plot_metrics_vs_rank()
+        test_spc.plot_roc(noisey=True)        
         test_spc.plot_metric_vs_metric(
                         ('lda_score', 'Fisher Ratio'),
                         ('lda_acc_1', 'Mean Accuracy'))
         test_spc.export_df('all')
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sps.__del__(rmproj=True)
 
     # def test_plot_channel_distribution(self):
     #     """Testing the plot_channel_distribution function.

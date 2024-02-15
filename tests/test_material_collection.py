@@ -4,17 +4,20 @@ Part of the Spectral Parameters Toolkit
 Author: Roger Stabbins, NHM
 Date: 28-09-2022
 """
-from distutils.command.build import build
+import os
 import unittest
 from datetime import date
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from config import OUTPUT_DIRECTORY, PACKAGE_DIRECTORY, WVLS, SAMPLE_RES
-from material_collection import HEADER_LIST, MaterialCollection
-from instrument import Instrument
-from test_instrument import build_test_instrument
-from test_data import generate_test_spectral_library
+from sptk.config import OUTPUT_DIRECTORY, WVLS, SAMPLE_RES
+from sptk.material_collection import HEADER_LIST, MaterialCollection
+from sptk.instrument import Instrument
+from test_instrument import build_test_instrument, delete_test_instrument
+from test_data import generate_test_spectral_library, delete_test_spectral_library
+
+test_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(test_dir)
 
 class TestMaterialCollection(unittest.TestCase):
     """Class to test the material_collection module MaterialCollection class."""
@@ -32,7 +35,7 @@ class TestMaterialCollection(unittest.TestCase):
                 }
         library = 'test_library'
 
-        lib_dir = Path(Path('..') / 'data' / 'spectral_library' / 'test_library')
+        lib_dir = Path('spectral_library' , 'test_library')
         tg_dir = Path(lib_dir / 'test_target')
         bg_dir = Path(lib_dir / 'test_background')
         expected = {
@@ -46,7 +49,8 @@ class TestMaterialCollection(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-        # clean up test spectral library
+        # clean up test spectral library        
+        delete_test_spectral_library()
 
     def test_init_frame(self):
         """Testing the init_frame function.
@@ -64,7 +68,7 @@ class TestMaterialCollection(unittest.TestCase):
 
         with self.subTest():
             # check Filepath
-            lib_dir = Path( Path('..') / 'data' / 'spectral_library'/'test_library')
+            lib_dir = Path('spectral_library', 'test_library')
             tg_dir = Path(lib_dir / 'test_target')
             bg_dir = Path(lib_dir / 'test_background')
             expected = pd.Series([
@@ -96,6 +100,9 @@ class TestMaterialCollection(unittest.TestCase):
             wvl_start_idx_expected = 2 + len(HEADER_LIST) + 2
             result_columns = result.columns[wvl_start_idx_expected:]
             pd.testing.assert_index_equal(result_columns, expected_columns)
+    
+        # clean up test spectral library
+        delete_test_spectral_library()
 
     def test_load_material(self):
         """Testing the load_material function
@@ -134,6 +141,9 @@ class TestMaterialCollection(unittest.TestCase):
             expected_data = test_data[0][WVLS].to_frame().T
             result_data = result.loc[:,WVLS]
             pd.testing.assert_frame_equal(result_data, expected_data)
+        
+        # clean up test spectral library
+        delete_test_spectral_library()
 
     def test_init_new_allow_out_of_bounds(self):
         """Testing the init function, for a new MaterialCollection
@@ -189,6 +199,9 @@ class TestMaterialCollection(unittest.TestCase):
             np.testing.assert_array_equal(result_nan_wvls, expected)
 
         result.__del__(rmproj = True)
+        
+        # clean up test spectral library
+        delete_test_spectral_library()
 
     def test_init_new_not_allow_out_of_bounds(self):
         """Testing the init function, for a new MaterialCollection
@@ -235,6 +248,9 @@ class TestMaterialCollection(unittest.TestCase):
             self.assertTrue(result.main_df.empty)
 
         result.__del__(rmproj = True)
+
+        # clean up test spectral library
+        delete_test_spectral_library()
 
     def test_init_new(self):
         """Testing the init function, for a new MaterialCollection
@@ -284,6 +300,9 @@ class TestMaterialCollection(unittest.TestCase):
 
         result.__del__(rmproj = True)
 
+        # clean up test spectral library
+        delete_test_spectral_library()
+
     def test_balance_class_sizes(self):
         """Testing the balance_class_sizes function.
         """
@@ -320,6 +339,9 @@ class TestMaterialCollection(unittest.TestCase):
             self.assertEqual(tg_size, bg_size)
 
         result.__del__(rmproj = True)
+
+        # clean up test spectral library
+        delete_test_spectral_library()
 
     def test_balance_class_sizes_repeatable(self):
         """Testing the balance_class_sizes random_state function.
@@ -384,6 +406,11 @@ class TestMaterialCollection(unittest.TestCase):
         with self.subTest('Uncontrolled random sampling'):
             self.assertFalse(result_3.equals(result_1))
 
+        result.__del__(rmproj = True)
+
+        # clean up test spectral library
+        delete_test_spectral_library()
+
     def test_channel_mask(self):
         """Testing channel_mask function.
         """
@@ -405,7 +432,7 @@ class TestMaterialCollection(unittest.TestCase):
                     export_df=False)
         # get test instrument
         test_inst_name = build_test_instrument(use_config_spectral_range=True)
-        test_inst = Instrument(test_inst_name)
+        test_inst = Instrument(test_inst_name, project_name='test')
         # get locations of channel masks
         test_refl = test_matcol.main_df.loc[:,SAMPLE_RES['wvl_min']:].to_numpy()
         result = list(test_matcol.channel_mask(test_refl, test_inst)[0])
@@ -414,6 +441,12 @@ class TestMaterialCollection(unittest.TestCase):
         expected = list((test_inst.cwls() < (cut_off - cut_off/20)).values)
 
         self.assertListEqual(result, expected)
+
+        test_matcol.__del__(rmproj = True)
+
+        # clean up test spectral library and instrument
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
 
     def test_sample(self):
         """Testing the sample function.
@@ -434,11 +467,17 @@ class TestMaterialCollection(unittest.TestCase):
                     plot_profiles=False,
                     export_df=False)
         test_inst_name = build_test_instrument(use_config_spectral_range=True)
-        test_inst = Instrument(test_inst_name, load_existing=False)
+        test_inst = Instrument(test_inst_name, project_name='test')
 
         result = test_matcol.sample(test_inst)[0]
         expected = np.full(len(test_inst.cwls()), 0.5)
         np.testing.assert_array_almost_equal(result, expected, decimal=7)
+
+        test_matcol.__del__(rmproj = True)
+
+        # clean up test spectral library and instrument
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
 
     def test_get_refl_df(self):
         """Testing get_refl_df function for category and mineral selection.
@@ -483,5 +522,10 @@ class TestMaterialCollection(unittest.TestCase):
             expected = [entry['Data ID'] for entry in test_data]
             self.assertListEqual(result, expected)
 
-if __name__ == '__main__':
+        test_matcol.__del__(rmproj = True)
+
+        # clean up test spectral library
+        delete_test_spectral_library()
+
+if __name__ == '__main__':        
     unittest.main(verbosity=2)

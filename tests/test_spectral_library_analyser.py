@@ -15,8 +15,11 @@ from sptk.spectral_library_analyser import SpectralLibraryAnalyser
 from sptk.material_collection import MaterialCollection
 from sptk.instrument import Instrument
 from sptk.observation import Observation
-from test_instrument import build_test_instrument
-from test_material_collection import generate_test_spectral_library
+from test_instrument import build_test_instrument, delete_test_instrument
+from test_material_collection import generate_test_spectral_library, delete_test_spectral_library
+
+test_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(test_dir)
 
 def generate_test_objects(n_samples: int = 1):
     # build test data
@@ -42,6 +45,7 @@ def generate_test_objects(n_samples: int = 1):
     test_inst_name = build_test_instrument(use_config_spectral_range=True)
     test_inst = Instrument(
                     test_inst_name,
+                    'test',
                     load_existing=False,
                     plot_profiles=False,
                     export_df=False)
@@ -60,7 +64,7 @@ class TestSpectralLibraryAnalyser(unittest.TestCase):
     def test_init_material_collection(self):
         """Testing the init function for MaterialCollection.
         """
-        _, test_matcol, _, _ = generate_test_objects()
+        _, test_matcol, test_inst, test_obs = generate_test_objects()
 
         test_sla = SpectralLibraryAnalyser(test_matcol)
 
@@ -85,10 +89,15 @@ class TestSpectralLibraryAnalyser(unittest.TestCase):
             result = test_sla.band_info
             pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_plot_profiles_material_collection(self):
         """Testing the plot_profiles function for MaterialCollection.
         """
-        _, test_matcol, _, _ = generate_test_objects(n_samples = 10)
+        _, test_matcol, test_inst, test_obs = generate_test_objects(n_samples = 10)
         test_sla = SpectralLibraryAnalyser(test_matcol)
 
         test_sla.plot_profiles()
@@ -98,10 +107,15 @@ class TestSpectralLibraryAnalyser(unittest.TestCase):
         result = os.path.isdir(expected)
         self.assertTrue(result)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_remove_continuum_material_collection(self):
         """Testing the remove_continuum function for MaterialCollection.
         """
-        _, test_matcol, _, _ = generate_test_objects(n_samples = 1)
+        _, test_matcol, test_inst, test_obs = generate_test_objects(n_samples = 1)
         test_sla = SpectralLibraryAnalyser(test_matcol)
 
         # performing cr on flat test profiles should produce and identical
@@ -118,26 +132,41 @@ class TestSpectralLibraryAnalyser(unittest.TestCase):
             result = test_sla.spectra_obj.main_df
             pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
 
     def test_visualise_spectrogram_material_collection(self):
         """Testing the visualise_spectrogram function for MaterialCollection.
         """
-        _, test_matcol, _, _ = generate_test_objects(n_samples = 10)
+        _, test_matcol, test_inst, test_obs = generate_test_objects(n_samples = 10)
         test_sla = SpectralLibraryAnalyser(test_matcol)
 
         test_sla.visualise_spectrogram()        
         out_file = Path(test_sla.project_dir, 'spectrogram').with_suffix(PLT_FRMT)
         self.assertTrue(os.path.isfile(out_file))
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_analyse_bands_material_collection(self):
         """Testing the analyse_bands function for MaterialCollection.
         TODO method is not complete.
         """
-        _, test_matcol, _, _ = generate_test_objects(n_samples = 2)
+        _, test_matcol, test_inst, test_obs = generate_test_objects(n_samples = 2)
         test_sla = SpectralLibraryAnalyser(test_matcol)
 
         result = test_sla.analyse_bands()
         print(result)
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
         pass
 
     def test_synthesize_spectra_from_band_info_material_collection(self):
@@ -161,7 +190,7 @@ class TestSpectralLibraryAnalyser(unittest.TestCase):
     def test_plot_profiles_observation(self):
         """Testing the plot_profiles function for Observation.
         """
-        _, _, _, test_obs = generate_test_objects()
+        _, _, test_inst, test_obs = generate_test_objects()
 
         with self.subTest('no noise'):
             test_sla = SpectralLibraryAnalyser(test_obs)
@@ -183,10 +212,15 @@ class TestSpectralLibraryAnalyser(unittest.TestCase):
             result = os.path.isdir(expected)
             self.assertTrue(result)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_remove_continuum_observation(self):
         """Testing the remove_continuum function for Observation.
         """
-        _, _, _, test_obs = generate_test_objects(n_samples = 1)
+        _, _, test_inst, test_obs = generate_test_objects(n_samples = 1)
         test_sla = SpectralLibraryAnalyser(test_obs)
 
         # performing cr on flat test profiles should produce and identical
@@ -196,27 +230,42 @@ class TestSpectralLibraryAnalyser(unittest.TestCase):
         result = test_sla.remove_continuum()
         pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_visualise_spectrogram_observation(self):
         """Testing the visualise_spectrogram function for Observation.
         """
-        _, _, _, test_obs = generate_test_objects(n_samples = 10)
+        _, _, test_inst, test_obs = generate_test_objects(n_samples = 10)
         test_sla = SpectralLibraryAnalyser(test_obs)
 
         test_sla.visualise_spectrogram()
         out_file = Path(test_sla.project_dir, 'spectrogram').with_suffix(PLT_FRMT)
         self.assertTrue(os.path.isfile(out_file))
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
+
     def test_visualise_spectrogram_observation_with_noise(self):
         """Testing the visualise_spectrogram function for Observation with noise
         added.
         """
-        _, _, _, test_obs = generate_test_objects(n_samples = 10)
+        _, _, test_inst, test_obs = generate_test_objects(n_samples = 10)
         test_obs.add_noise(0.1, 10)
         test_sla = SpectralLibraryAnalyser(test_obs)
 
         test_sla.visualise_spectrogram()
         out_file = Path(test_sla.project_dir, 'spectrogram').with_suffix(PLT_FRMT)
         self.assertTrue(os.path.isfile(out_file))
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_obs.__del__(rmproj=True)
 
     def test_analyse_bands_observation(self):
         """Testing the analyse_bands function for Observation.

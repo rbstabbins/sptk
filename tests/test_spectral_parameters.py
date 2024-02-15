@@ -14,8 +14,11 @@ from sptk.material_collection import MaterialCollection
 from sptk.instrument import Instrument
 from sptk.observation import Observation
 from sptk.spectral_parameters import SpectralParameters
-from test_instrument import build_test_instrument
-from test_material_collection import generate_test_spectral_library
+from test_instrument import build_test_instrument, delete_test_instrument
+from test_material_collection import generate_test_spectral_library, delete_test_spectral_library
+
+test_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(test_dir)
 
 def generate_test_objects(
         n_samples: int = 1,
@@ -45,6 +48,7 @@ def generate_test_objects(
     test_inst_name = build_test_instrument(use_config_spectral_range=True)
     test_inst = Instrument(
                     test_inst_name,
+                    'test',
                     load_existing=False,
                     plot_profiles=False,
                     export_df=False)
@@ -99,6 +103,9 @@ class TestSpectralParameters(unittest.TestCase):
         with self.subTest('shoulder height labels'):
             self.assertIsNone(test_sp.shoulder_height_lbls)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
         test_sp.__del__(rmproj=True)
 
     def test_init_existing(self):
@@ -140,12 +147,15 @@ class TestSpectralParameters(unittest.TestCase):
         with self.subTest('shoulder height labels'):
             self.assertIsNone(test_sp.shoulder_height_lbls)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
         test_sp.__del__(rmproj=True)
 
     def test_parse_sp_lbls(self):
         """Testing the parse_sp_lbls function.
         """
-        _, _, _, test_obs = generate_test_objects()
+        _, _, test_inst, test_obs = generate_test_objects()
         test_sp = SpectralParameters(test_obs, load_existing=False)
         test_list = pd.Series(['R_400_500', 'BD_600_700',
                                         'S_500_600', 'SH_400_500_600'])
@@ -166,21 +176,31 @@ class TestSpectralParameters(unittest.TestCase):
             expected = 'SH_400_500_600'
             self.assertEqual(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
         test_sp.__del__(rmproj=True)
 
     def test_get_channel_data(self):
         """Testing get_channel_data function.
         """
-        _, _, _, test_obs = generate_test_objects()
+        _, _, test_inst, test_obs = generate_test_objects()
         test_sp = SpectralParameters(test_obs, load_existing=False)
         test_list = test_obs.chnl_lbls[0:2]
         result = test_sp.get_channel_data(test_list)
         print(result)
 
+        # TODO write test
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sp.__del__(rmproj=True)
+
     def test_compute_ratio_permutations(self):
         """Testing the compute_ratio_permutations function.
         """
-        _, _, _, test_obs = generate_test_objects(flat=True)
+        _, _, test_inst, test_obs = generate_test_objects(flat=True)
         test_sp = SpectralParameters(test_obs, load_existing=False)
         test_list = test_obs.chnl_lbls[0:3]
         test_cwls = test_obs.wvls[0:3]
@@ -209,12 +229,15 @@ class TestSpectralParameters(unittest.TestCase):
                 index = test_obs.main_df.index)
             pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
         test_sp.__del__(rmproj=True)
 
     def test_compute_slope_permutations(self):
         """Testing the compute_slope_permutations function.
         """
-        _, _, _, test_obs = generate_test_objects(flat=True)
+        _, _, test_inst, test_obs = generate_test_objects(flat=True)
         test_sp = SpectralParameters(test_obs, load_existing=False)
         test_list = test_obs.chnl_lbls[0:3]
         test_cwls = test_obs.wvls[0:3]
@@ -237,12 +260,15 @@ class TestSpectralParameters(unittest.TestCase):
                 index = test_obs.main_df.index)
             pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
         test_sp.__del__(rmproj=True)
 
     def test_compute_band_depth_permutations(self):
         """Testing the compute_band_depth_permutations function.
         """
-        _, _, _, test_obs = generate_test_objects(flat=True)
+        _, _, test_inst, test_obs = generate_test_objects(flat=True)
         test_sp = SpectralParameters(test_obs, load_existing=False)
         test_list = test_obs.chnl_lbls[0:4]
         test_cwls = test_obs.wvls[0:4]
@@ -268,12 +294,15 @@ class TestSpectralParameters(unittest.TestCase):
                 index = test_obs.main_df.index)
             pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
         test_sp.__del__(rmproj=True)
 
     def test_compute_shoulder_height_permutations(self):
         """Testing the compute_shoulder_height_permutations function.
         """
-        _, _, _, test_obs = generate_test_objects(flat=True)
+        _, _, test_inst, test_obs = generate_test_objects(flat=True)
         test_sp = SpectralParameters(test_obs, load_existing=False)
         test_list = test_obs.chnl_lbls[0:4]
         test_cwls = test_obs.wvls[0:4]
@@ -299,12 +328,15 @@ class TestSpectralParameters(unittest.TestCase):
                 index = test_obs.main_df.index)
             pd.testing.assert_frame_equal(result, expected)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
         test_sp.__del__(rmproj=True)
 
     def test_compute_spectral_parameters(self):
         """Testing the compute_spectral_parameters function.
         """
-        _, _, _, test_obs = generate_test_objects(n_samples=10)
+        _, _, test_inst, test_obs = generate_test_objects(n_samples=10)
         test_sp = SpectralParameters(test_obs, load_existing=False)
         test_sp.compute_spectral_parameters()
         with self.subTest('ratios'):
@@ -320,10 +352,15 @@ class TestSpectralParameters(unittest.TestCase):
             result = test_sp.shoulder_height_lbls
             self.assertIsNotNone(result)
 
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        test_sp.__del__(rmproj=True)
+
     def test_test_train_random_split(self):
         """Testing the test_train_random_split function.
         """
-        _, _, _, test_obs = generate_test_objects(n_samples=10)
+        _, _, test_inst, test_obs = generate_test_objects(n_samples=10)
         root_sps = SpectralParameters(test_obs, load_existing=False)
         train_sps, test_sps = root_sps.train_test_random_split(0.2, 0)
         # check that the sizes are as expected, and check that the metadata
@@ -340,6 +377,11 @@ class TestSpectralParameters(unittest.TestCase):
             expected = root_sps.main_df.columns
             result = train_sps.main_df.columns
             pd.testing.assert_index_equal(result, expected)
+
+        # cleanup
+        delete_test_spectral_library()
+        delete_test_instrument(test_inst)
+        root_sps.__del__(rmproj=True)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

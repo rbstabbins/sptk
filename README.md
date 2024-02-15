@@ -38,18 +38,16 @@
 * sampling a spectral library with the instrument,
 * measuring the reconstruction error of the instrument on the spectral library,
 * evaluating the spectral parameters afforded by the instrument,
-* investigating the success of different spectral parmameters, and spectral parameter combinations, at separating categories of materials.
+* evaluating and ranking the ability of the spectral parmameters, and spectral parameter combinations, to separate categories of materials.
 
-The last point employs the method of 'Supervised Spectral Parameter Learning', as described in the paper Stabbins et al., submitted to Earth & Space Science (2024).
+The ranking of spectral parameter combinations employs the method of 'Supervised Spectral Parameter Learning', as described in the paper Stabbins et al., submitted to Earth & Space Science (2024).
 This uses Linear Discriminant Analysis to evaluate all possible spectral parameter pair combinations in their ability to separate the classes of a labelled dataset of material reflectance spectra.
 
 The method of the paper is demonstrated in the accompanying notebook, "Detecting Hematite at Oxia Planum with the ExoMars PanCam Filter Suite", that can be found here [link to notebook repository].
 
-Each major step is also more generically described in the notebooks found in the 'examples' directory.
-
 ## Installing <a name = "installing"></a>
 
-TO DO.
+```sptk``` is available via PyPI. We recommend downloading a copy of the [https://github.com/rbstabbins/sptk](https://github.com/rbstabbins/sptk) repository, and using this as the directory for running ```sptk``` projects. We also recommend downloading a copy of the [ESS Paper Dataset](ESS Paper Dataset) to use as input data. This hosts the spectral library and instrument data used in the Stabbins et al 2024 paper.
 
 ### Prerequisites
 
@@ -83,7 +81,7 @@ Explain how to run the automated tests for this system.
 
 ## Usage <a name="usage"></a>
 
-Add notes about how to use the system.
+Each major step is described in the notebooks found in the 'examples' directory.
 
 ## Authors <a name = "authors"></a>
 

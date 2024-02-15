@@ -14,6 +14,9 @@ from sptk.instrument import InstrumentBuilder
 from sptk.instrument import Instrument
 from sptk.config import DATA_DIRECTORY, SAMPLE_RES, WVLS
 
+test_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(test_dir)
+
 def build_test_instrument(use_config_spectral_range: bool = False):
     instrument_name = 'test'
     instrument_type = 'filter-wheel'
@@ -35,6 +38,16 @@ def build_test_instrument(use_config_spectral_range: bool = False):
     test_df = test_instrument.generate_filter_band_table()
     test_instrument.export_instrument(test_df)
     return instrument_name
+
+def delete_test_instrument(test_instrument: Instrument):
+    """Delete the test instrument from the data directory
+
+    :param test_instrument: Test Instrument object
+    :type test_instrument: Instrument
+    """    
+    inst_dir = Path(DATA_DIRECTORY / 'instruments')
+    filepath = Path(inst_dir, f'{test_instrument.name}').with_suffix('.csv')
+    os.remove(filepath)
 
 class TestInstrument(unittest.TestCase):
     """Class to test the Instrument class
@@ -153,7 +166,7 @@ class TestInstrument(unittest.TestCase):
         result = Instrument(test_name, project_name='test', export_df=False)
 
         pd.testing.assert_frame_equal(result.main_df, expected_main_df)
-        result.__del__(rmdir=True)
+        result.__del__(rmproj=True)
 
     def test_init_existing(self):
         """Testing the init function for an existing instrument
@@ -170,9 +183,8 @@ class TestInstrument(unittest.TestCase):
 
         pd.testing.assert_frame_equal(result_main_df, expected_main_df)
 
-        initial_instrument.__del__(rmdir=True)
-        reload_instrument.__del__(rmdir=True)
-
+        initial_instrument.__del__(rmproj=True)
+        reload_instrument.__del__(rmproj=True)
 
 class TestInstrumentBuilder(unittest.TestCase):
     """Class to test the InstrumentBuilder class

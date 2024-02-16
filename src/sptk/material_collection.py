@@ -440,27 +440,36 @@ class MaterialCollection():
         if self.main_df.Category.value_counts().is_unique:
             print('Balancing class sizes...')
             class_n_dict = self.main_df.Category.value_counts().to_dict()
-            # for each class that is not the smallest class
+            # get the smallest class
             min_class = min(class_n_dict, key=class_n_dict.get)
+            # for each class that is not the smallest class:
             for cat in self.categories:
                 if cat is min_class:
                     continue
-                # number of samples to remove
+                # number of samples to remove from this class is the
+                # difference between the number of samples this class and the
+                # number of samples in the smallest class
                 n_r = class_n_dict[cat] - class_n_dict[min_class]
 
-                # distribute samples between mineral groups
+                # get the number of samples in each mineral group of this class
                 cat_df = self.main_df[self.main_df.Category == cat]
                 mnrl_n = cat_df.groupby('Mineral Name')['Mineral Name'].count()
 
+                # number of samples to remove from each mineral group
                 n_m_r = n_r // len(mnrl_n)
+                # remainder of samples to remove from the class
                 n_r_r = n_r % len(mnrl_n)
 
+                # remove number of samples from each mineral group
                 for mnrl in mnrl_n.index:
                     # randomly select n_m_r samples
                     to_drop = cat_df[cat_df['Mineral Name'] == mnrl].sample(
                         n=n_m_r, random_state=random_state).index
                     # remove the selected samples
                     self.main_df.drop(to_drop, inplace=True)
+                    # also remove the selected samples from the cat_df
+                    cat_df.drop(to_drop, inplace=True)
+                # remove remainder from this class
                 if n_r_r != 0:
                     to_drop = cat_df.sample(
                             n=n_r_r, random_state=random_state).index

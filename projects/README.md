@@ -1,0 +1,1 @@
+Products generated during analysis from notebooks placed in ```/examples``` or ```notebooks``` will be placed here.

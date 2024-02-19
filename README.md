@@ -47,7 +47,7 @@ The method of the paper is demonstrated in the accompanying notebook, "Detecting
 
 ## Installing <a name = "installing"></a>
 
-```sptk``` is available via PyPI. We recommend downloading a copy of the [https://github.com/rbstabbins/sptk](https://github.com/rbstabbins/sptk) repository, and using this as the directory for running ```sptk``` projects. We also recommend downloading a copy of the [ESS Paper Dataset](ESS Paper Dataset) to use as input data. This hosts the spectral library and instrument data used in the Stabbins et al 2024 paper.
+```sptk``` is available via PyPI. We recommend downloading a copy of the [https://github.com/rbstabbins/sptk](https://github.com/rbstabbins/sptk) repository, and using this as a base directory for running ```sptk``` projects. We also recommend downloading a copy of the [ESS Paper Dataset](ESS Paper Dataset) to use as input data. This hosts the spectral library and instrument data used in the Stabbins et al 2024 paper.
 
 ### Prerequisites
 

@@ -23,13 +23,15 @@
 
 ## Table of Contents
 
-- [About](#about)
-- [Installing](#installing)
-- [Usage](#usage)
-- [TODO](../TODO.md)
-- [Contributing](../CONTRIBUTING.md)
-- [Authors](#authors)
-- [Acknowledgments](#acknowledgement)
+- [Table of Contents](#table-of-contents)
+- [About ](#about-)
+- [Installing ](#installing-)
+  - [Prerequisites](#prerequisites)
+  - [Installing](#installing)
+- [Running the tests ](#running-the-tests-)
+- [Usage ](#usage-)
+- [Authors ](#authors-)
+- [Acknowledgements ](#acknowledgements-)
 
 ## About <a name = "about"></a>
 

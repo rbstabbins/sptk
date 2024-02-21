@@ -1,5 +1,6 @@
 /.vscode
 /.DS_Store
+**/.DS_Store
 /data/instruments/*
 !data/instruments/README.md
 /data/spectral_library/*

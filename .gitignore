@@ -6,6 +6,7 @@
 !data/spectral_library/README.md
 /dist
 /examples/.DS_Store
+/examples/example_data
 /notebooks/*
 !notebooks/README.md
 /projects/*

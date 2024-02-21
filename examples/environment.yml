@@ -1,0 +1,8 @@
+name: sptk_examples
+channels:
+  - defaults
+dependencies:
+  - pip
+  - python==3.10.8
+  - ipykernel
+  - sptk==0.1

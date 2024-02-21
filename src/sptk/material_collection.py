@@ -467,8 +467,8 @@ class MaterialCollection():
                         n=n_m_r, random_state=random_state).index
                     # remove the selected samples
                     self.main_df.drop(to_drop, inplace=True)
-                    # also remove the selected samples from the cat_df
-                    cat_df.drop(to_drop, inplace=True)
+                    # update the cat_df to reflect the removal
+                    cat_df = self.main_df[self.main_df.Category == cat]
                 # remove remainder from this class
                 if n_r_r != 0:
                     to_drop = cat_df.sample(

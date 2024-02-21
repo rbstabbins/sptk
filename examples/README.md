@@ -16,4 +16,4 @@ This directory hosts example notebooks describing and demonstrating the key proc
 
 The notebooks involve the construction of an instrument file, and guides the user through the process of downloading and creating an example spectral library (via [ViSOR](https://westernreflectancelab.com/visor/)). 
 
-For completeness and verification, this example dataset can be downloaded from Zenodo (doi:[10.5281/zenodo.10683367]((https://zenodo.org/doi/10.5281/zenodo.10683367))). Once downloaded, the example instrument file and example spectral library must be placed in the ```sptk/data/instruments/``` and ```sptk/data/spectral_library/``` directories, respectively, as instructed on the repository homepage.
+For completeness and verification, this example dataset can be downloaded from Zenodo ([doi:10.5281/zenodo.10683367]((https://zenodo.org/doi/10.5281/zenodo.10683367))). Once downloaded, the example instrument file and example spectral library must be placed in the ```sptk/data/instruments/``` and ```sptk/data/spectral_library/``` directories, respectively, as instructed on the repository homepage.

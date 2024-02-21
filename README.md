@@ -5,19 +5,10 @@
 
 <h3 align="center">sptk: The Spectral Parameters Toolkit</h3>
 
-<div align="center">
-
-[![Status](https://img.shields.io/badge/status-active-success.svg)]()
-[![GitHub Issues](https://img.shields.io/github/issues/kylelobo/The-Documentation-Compendium.svg)](https://github.com/rbstabbins/sptk/issues)
-[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/kylelobo/The-Documentation-Compendium.svg)](https://github.com/rbstabbins/sptk/pulls)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)
-
-</div>
-
 ---
 
 <p align="center">
-<strong>sptk</strong> is a Python library for investigating the ability of a multispectral imaging system to identify distinct materials and material groups through differences in reflectance spectra.
+<strong>sptk</strong> is a Python package for investigating the ability of a multispectral imaging system to identify distinct materials and material groups through differences in reflectance spectra.
     <br>
 </p>
 
@@ -28,10 +19,10 @@
 - [Installing ](#installing-)
   - [Prerequisites](#prerequisites)
   - [Installing](#installing)
-- [Running the tests ](#running-the-tests-)
-- [Usage ](#usage-)
-- [Authors ](#authors-)
-- [Acknowledgements ](#acknowledgements-)
+- [Running the Tests](#running-the-tests)
+- [Running the Example Notebooks](#running-the-example-notebooks)
+- [Authors](#authors)
+- [Citing the Software](#citing-the-software)
 
 ## About <a name = "about"></a>
 
@@ -42,57 +33,66 @@
 * evaluating the spectral parameters afforded by the instrument,
 * evaluating and ranking the ability of the spectral parmameters, and spectral parameter combinations, to separate categories of materials.
 
-The ranking of spectral parameter combinations employs the method of 'Supervised Spectral Parameter Learning', as described in the paper Stabbins et al., submitted to Earth & Space Science (2024).
-This uses Linear Discriminant Analysis to evaluate all possible spectral parameter pair combinations in their ability to separate the classes of a labelled dataset of material reflectance spectra.
-
-The method of the paper is demonstrated in the accompanying notebook, "Detecting Hematite at Oxia Planum with the ExoMars PanCam Filter Suite", that can be found here [link to notebook repository].
-
 ## Installing <a name = "installing"></a>
 
-```sptk``` is available via PyPI. We recommend downloading a copy of the [https://github.com/rbstabbins/sptk](https://github.com/rbstabbins/sptk) repository, and using this as a base directory for running ```sptk``` projects. We also recommend downloading a copy of the [ESS Paper Dataset](ESS Paper Dataset) to use as input data. This hosts the spectral library and instrument data used in the Stabbins et al 2024 paper.
+```sptk``` is available via PyPI and conda. 
+
+We recommend downloading a copy of the [https://github.com/rbstabbins/sptk](https://github.com/rbstabbins/sptk) repository, and running the unit tests and working through the example notebooks. 
+
+To run the example notebooks you'll also need to download the accompanying Example Dataset, hosted in the following Zenodo repository: [doi:10.5281/zenodo.10683367](https://zenodo.org/doi/10.5281/zenodo.10683367).
 
 ### Prerequisites
 
-What things you need to install the software and how to install them.
+First, prepare a new environment with Python=3.10.8, using your environment manager of choice. 
 
+For example, with conda:
 ```
-Give examples
+conda env create -n sptk python=3.10.8
+```
+and activate the environment:
+```
+conda activate sptk
 ```
 
 ### Installing
 
-A step by step series of examples that tell you how to get a development env running.
-
-Say what the step will be
+Install sptk v.0.1 with pip or conda, e.g.:
 
 ```
-Give the example
+conda install sptk=0.1
+```
+or
+```
+pip install sptk=0.1
 ```
 
-And repeat
+## Running the Tests<a name = "running-the-tests"></a>
+
+The ```sptk/tests/``` directory hosts a set of unit tests for each module of the **sptk** package. These have been written for the ```unittest``` unit testing framework.
+
+The unit tests can be executed by navigating to the ```sptk/tests``` directory and running:
 
 ```
-until finished
+python -m unittest -v
 ```
 
-End with an example of getting some data out of the system or using it for a little demo.
+The unit tests provided are comprehensive but not exhaustive. We recommend also executing the example notebooks to test and understand the software.
 
-## Running the tests <a name = "tests"></a>
+## Running the Example Notebooks<a name = "running-the-example-notebooks"></a>
 
-Explain how to run the automated tests for this system.
+We recommend exploring the [example notebooks](./examples/) to become familiar with the software and the placement of directories in the repository.
 
-## Usage <a name="usage"></a>
+Please follow the guidelines in the [README.md](./examples/README.md) to download the required [Example Dataset](https://zenodo.org/doi/10.5281/zenodo.10683367) for executing the example notebooks.
 
-Each major step is described in the notebooks found in the 'examples' directory.
+The ```sptk/tests/``` directory hosts a set of unit tests for each module of the **sptk** package. These have been written with
 
-## Authors <a name = "authors"></a>
+## Authors<a name = "authors"></a>
 
-- [@rbstabbins](https://github.com/rbstabbins) - Idea & Initial work
+The Spectral Parameters Toolkit was designed and developed by [@rbstabbins](https://github.com/rbstabbins).
 
 See also the list of [contributors](https://github.com/rbstabbins/sptk/contributors) who participated in this project.
 
-## Acknowledgements <a name = "acknowledgement"></a>
+## Citing the Software<a name = "citing-the-software"></a>
 
-- ViSOR: M. Rice, M. St. Claire, C. Million
-- pysptools
-- spectral
+If you use **sptk** in your research, please provide acknowledgement to the authors with the following citation:
+[Add here]

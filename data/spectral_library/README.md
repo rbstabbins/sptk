@@ -19,4 +19,4 @@ The directory structure for the ```/spectral_library``` is:
 │   ├── [library (...) name]  
 ```
 
-The example spectral library can be found at: [TODO insert link]()
+An example spectral library can be found at: [doi:10.5281/zenodo.10683367](https://zenodo.org/doi/10.5281/zenodo.10683367).

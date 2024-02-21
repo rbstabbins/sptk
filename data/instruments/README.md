@@ -19,4 +19,4 @@ or [wavelngth (nm)], [ID/Name Transmission], [...] e.g.:
 |480|0.10|0.15|...|
 |...|...|...|...|
 
-Example instrument files can be found at: (INSERT LINK HERE)[INSEWRT LINK HERE]
+An example instrument file can be found at: [doi:10.5281/zenodo.10683367](https://zenodo.org/doi/10.5281/zenodo.10683367).

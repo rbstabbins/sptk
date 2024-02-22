@@ -42,7 +42,7 @@
 
 ## Installing <a name = "installing"></a>
 
-```sptk``` is available via PyPI and conda. 
+```sptk``` is available via PyPI. 
 
 We recommend downloading a copy of the [https://github.com/rbstabbins/sptk](https://github.com/rbstabbins/sptk) repository, and running the unit tests and working through the example notebooks. 
 

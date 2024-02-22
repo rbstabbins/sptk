@@ -95,4 +95,4 @@ See also the list of [contributors](https://github.com/rbstabbins/sptk/contribut
 ## Citing the Software<a name = "citing-the-software"></a>
 
 If you use **sptk** in your research, please provide acknowledgement to the authors with the following citation:
-[Add here]
+[At time of pre-release, the citation for the Zenodo repository has not been generated. This will be updated for the v0.1 release].

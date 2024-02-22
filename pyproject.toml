@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sptk"
-version = "0.1"
+version = "0.1a1"
 description = "The Spectral Parameters Toolkit (SPTK) is a Python package for investigating the ability of a multispectral imaging system to identify distinct materials and material groups through differences in reflectance spectra."
 readme = "README.md"
 license = "MIT"

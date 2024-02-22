@@ -5,4 +5,5 @@ dependencies:
   - pip
   - python==3.10.8
   - ipykernel
-  - sptk==0.1
+  - pip:
+    - sptk==0.1

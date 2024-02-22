@@ -1,13 +1,13 @@
 <p align="center">
   <a href="" rel="noopener">
- <img max-width=960px src="https://github.com/rbstabbins/sptk/blob/v0.1a1/title.gif?raw=true" alt="Project logo"></a>
+ <img max-width=960px src="https://github.com/rbstabbins/sptk/blob/main/title.gif?raw=true" alt="Project logo"></a>
 </p>
 
 <h3 align="center">sptk: The Spectral Parameters Toolkit</h3>
 
 <div align='center'>
 
-[![DOI](https://zenodo.org/badge/756902064.svg)](https://zenodo.org/badge/latestdoi/756902064)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10692531.svg)](https://doi.org/10.5281/zenodo.10692531)
 
 </div>
 
@@ -61,14 +61,21 @@ and activate the environment:
 conda activate sptk
 ```
 
+Currently **sptk** is only available via pip, so make sure you have pip installed on your environment also, e.g.:
+
+```
+conda install pip
+```
+
+
 ### Installing
 
-Install sptk v.0.1 with pip or conda, e.g.:
+Install the latest version of **sptk** with pip:
 
 ```
-conda install sptk=0.1
+pip install sptk
 ```
-or
+you can also specify the version you'd like to install, e.g.:
 ```
 pip install sptk=0.1
 ```
@@ -102,7 +109,8 @@ See also the list of [contributors](https://github.com/rbstabbins/sptk/contribut
 ## Citing the Software<a name = "citing-the-software"></a>
 
 If you use **sptk** in your research, please provide acknowledgement to the authors with the following citation:
-Roger Stabbins, & Grindrod, P. (2024). rbstabbins/sptk: Release v0.1 (v0.1). Zenodo. https://doi.org/10.5281/zenodo.10692532
+
+Roger Stabbins, & Grindrod, P. (2024). rbstabbins/sptk: Release v0.1 (v0.1). Zenodo. https://doi.org/10.5281/zenodo.10692531
 
 ## Acknowledgements
 

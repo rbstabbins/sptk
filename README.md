@@ -110,7 +110,7 @@ See also the list of [contributors](https://github.com/rbstabbins/sptk/contribut
 
 If you use **sptk** in your research, please provide acknowledgement to the authors with the following citation:
 
-Roger Stabbins, & Grindrod, P. (2024). rbstabbins/sptk: Release v0.1 (v0.1). Zenodo. https://doi.org/10.5281/zenodo.10692531
+Roger Stabbins, & Grindrod, P. (2024). rbstabbins/sptk: Release v0.1 (v0.1). Zenodo. https://doi.org/10.5281/zenodo.10694286
 
 ## Acknowledgements
 

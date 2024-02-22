@@ -1,9 +1,15 @@
 <p align="center">
   <a href="" rel="noopener">
- <img max-width=960px src="title.gif" alt="Project logo"></a>
+ <img max-width=960px src="https://github.com/rbstabbins/sptk/blob/v0.1a1/title.gif?raw=true" alt="Project logo"></a>
 </p>
 
 <h3 align="center">sptk: The Spectral Parameters Toolkit</h3>
+
+<div align='center'>
+
+[![DOI](https://zenodo.org/badge/756902064.svg)](https://zenodo.org/badge/latestdoi/756902064)
+
+</div>
 
 ---
 
@@ -23,6 +29,7 @@
 - [Running the Example Notebooks](#running-the-example-notebooks)
 - [Authors](#authors)
 - [Citing the Software](#citing-the-software)
+- [Acknowledgements](#acknowledgements)
 
 ## About <a name = "about"></a>
 
@@ -95,4 +102,10 @@ See also the list of [contributors](https://github.com/rbstabbins/sptk/contribut
 ## Citing the Software<a name = "citing-the-software"></a>
 
 If you use **sptk** in your research, please provide acknowledgement to the authors with the following citation:
-[At time of pre-release, the citation for the Zenodo repository has not been generated. This will be updated for the v0.1 release].
+Roger Stabbins, & Grindrod, P. (2024). rbstabbins/sptk: Release v0.1 (v0.1). Zenodo. https://doi.org/10.5281/zenodo.10692532
+
+## Acknowledgements
+
+The development of this software has been funded by the following grants:
+- UK Space Agency Aurora Science Programme: Geochemistry to Geology for ExoMars 2020 visible to near infrared spectral variability ST/T001747/1
+- UK Space Agency Mars Exploration Science Standard Call 2023: Exploring the Limits of Material Discrimination with CaSSIS Multiband Imaging ST/Y005910/1

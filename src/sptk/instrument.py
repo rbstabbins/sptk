@@ -21,6 +21,7 @@ import pandas as pd
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 import seaborn as sns
 import sptk.config as cfg
 
@@ -191,16 +192,35 @@ class Instrument():
             init_df =pd.DataFrame(data=out,columns=cfg.WVLS,index=inst_df.index)
         else:
             out = inst_df.to_numpy().T
+
+            # interpolate each channel to simulation wavelengths
+            wvls_in = inst_df.index.to_numpy().astype('float64')
+            trans_in = inst_df.to_numpy().astype('float64')
+            trans_func = interp1d(wvls_in, trans_in.T, bounds_error=False)
+            out = trans_func(cfg.WVLS)
+
             # initialise the dataframe according to contents
             init_df = pd.DataFrame(
                             data=out,
                             columns=cfg.WVLS,
                             index=inst_df.columns)
             init_df.index.rename('filter_id')
-            inst_df = pd.DataFrame(init_df.idxmax(axis=1), dtype=int)
-            inst_df.index.rename('filter_id')
+
+            # get CWl and FWHM values
+            cwls = np.sum((out*cfg.WVLS),axis=1) / np.sum((out),axis=1)
+            cwls = np.round(cwls)
+
+            half_maxima = init_df.max(axis=1)/2
+            limits = np.greater(out.T, half_maxima.to_numpy().T).T
+            fwhms = np.zeros(len(half_maxima))
+            for channel in range(len(half_maxima)):
+                wvls_above_hmax = cfg.WVLS[limits[channel]]
+                fwhms[channel] = wvls_above_hmax[-1] - wvls_above_hmax[0]
+
+            inst_df = pd.DataFrame(cwls, dtype=int, index=init_df.index)
+            inst_df.index.rename('filter_id', inplace=True)
             inst_df = inst_df.rename(columns={0:'cwl'})
-            inst_df['fwhm'] = np.NaN
+            inst_df['fwhm'] = fwhms
         # concat with cwl and fwhm information (via inst_df)
         main_df = pd.merge(
                     left=inst_df,

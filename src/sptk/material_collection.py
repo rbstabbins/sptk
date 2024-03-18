@@ -15,6 +15,7 @@ from pathlib import Path
 from  shutil import rmtree
 from typing import Dict, List
 import click
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
@@ -724,8 +725,9 @@ class MaterialCollection():
             toc = time.perf_counter()
             print(f"Material Collection exported in {toc - tic:0.4f} seconds.")
 
-    def plot_profiles(self, categories_only: bool=False, ci: bool=False):
+    def plot_profiles(self, categories_only: bool=False, ci: bool=False) -> plt.Axes:
         """Plot the profiles of the materials
         """
         plotter = SpectralLibraryAnalyser(self)
-        plotter.plot_profiles(categories_only=categories_only, ci=ci)
+        ax = plotter.plot_profiles(categories_only=categories_only, ci=ci)
+        return ax

@@ -29,7 +29,7 @@ class SpectralLibraryAnalyser():
 
     def __init__(
             self,
-            spectra_obj: object,
+            spectra_obj: object, # TODO fix this to use Union[MaterialCollection, Observation] (currently involves circular import)
             synthetic: bool=False,
             ) -> None:
         """Create a SpectralLibraryAnalyser object
@@ -79,7 +79,7 @@ class SpectralLibraryAnalyser():
             with_noise: bool=False,
             scope: str='all',
             categories_only: bool=False,
-            ci: bool=False):
+            ci: bool=False) -> plt.Axes:
         """Plot the profiles of the materials of the spectral library
         """
         if cfg.TIME_IT:
@@ -90,7 +90,8 @@ class SpectralLibraryAnalyser():
         refl_df = self.spectra_obj.get_refl_df()
         cat_df = self.spectra_obj.get_cat_df()
         all_df = pd.concat([refl_df, cat_df], axis=1)
-        self.render_profile_plot(all_df,
+    
+        ax = self.render_profile_plot(all_df,
                     scope=scope,
                     with_noise=with_noise,
                     ci=ci)
@@ -99,7 +100,7 @@ class SpectralLibraryAnalyser():
             if cfg.TIME_IT:
                 toc = time.perf_counter()
                 print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
-            return
+            return ax
 
         # plot for each category and mineral name
         for cat in self.spectra_obj.categories:
@@ -111,7 +112,7 @@ class SpectralLibraryAnalyser():
                 cat_df = self.spectra_obj.get_cat_df(category=cat,
                                                             mineral_name=mnrl)
                 cat_mnrl_df = pd.concat([refl_df, cat_df], axis=1)
-                self.render_profile_plot(cat_mnrl_df,
+                ax = self.render_profile_plot(cat_mnrl_df,
                             cat=cat,
                             mnrl=mnrl,
                             scope=scope,
@@ -121,6 +122,8 @@ class SpectralLibraryAnalyser():
         if cfg.TIME_IT:
             toc = time.perf_counter()
             print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
+        return ax
 
     def render_profile_plot(self,
             data_df: pd.DataFrame,
@@ -174,8 +177,8 @@ class SpectralLibraryAnalyser():
         plt.rcParams.update({'font.size': 8, 'lines.markersize': 3})
         ax.set(
             xbound=(cfg.SAMPLE_RES['wvl_min']-10,cfg.SAMPLE_RES['wvl_max']+10),
-            ybound=(-0.1, y_max+0.1),
-            autoscale_on=False)
+            # ybound=(-0.1, y_max+0.1), # TODO decide if we want this limit removed permanently
+            autoscale_on=True)
 
         if ci:
             # long form version of plotting, to aggregate
@@ -263,6 +266,8 @@ class SpectralLibraryAnalyser():
         if cat != 'all':
             legend_file=Path(out_dir,filename+'_lgnd').with_suffix(cfg.PLT_FRMT)
             figl.savefig(legend_file)
+
+        return ax
 
     def remove_continuum(self):
         """Remove the continuum from all spectra, and overwrite the local copy

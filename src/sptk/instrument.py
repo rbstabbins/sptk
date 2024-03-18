@@ -33,6 +33,7 @@ class Instrument():
             self,
             name: str,
             project_name: str = 'case',
+            shape: str='gauss',
             load_existing: bool=cfg.LOAD_EXISTING,
             plot_profiles: bool = cfg.PLOT_PROFILES,
             export_df: bool = cfg.EXPORT_DF):
@@ -69,10 +70,10 @@ class Instrument():
                 self.main_df = pd.read_pickle(existing_pkl_path)
             else:
                 print('No existing DataFrame, building new for % r...' % name)
-                self.build_new_instrument(plot_profiles, export_df)
+                self.build_new_instrument(shape, plot_profiles, export_df)
         else:
             print("Building new DataFrame for % r..." % name)
-            self.build_new_instrument(plot_profiles, export_df)
+            self.build_new_instrument(shape, plot_profiles, export_df)
 
         self.filter_ids = self.main_df.index.to_list()
 
@@ -109,6 +110,7 @@ class Instrument():
                 print(f"No {name} directory to delete.")
 
     def build_new_instrument(self,
+            shape: str='gauss',
             plot_profiles: bool = cfg.PLOT_PROFILES,
             export_df: bool = cfg.EXPORT_DF) -> None:
         """Build DataFrame and optionally export and produce plots.
@@ -119,7 +121,7 @@ class Instrument():
         :type export_df: bool, optional
         """
         inst_data = Instrument.read_instrument_data(self.name)
-        self.main_df = Instrument.build_instrument_df(inst_data)
+        self.main_df = Instrument.build_instrument_df(inst_data, shape=shape)
         # optionally produce plots and files of the instrument
         if plot_profiles:
             self.plot_filter_profiles()
@@ -170,7 +172,29 @@ class Instrument():
         return gauss.transpose()
 
     @staticmethod
-    def build_instrument_df(inst_df: pd.DataFrame) -> pd.DataFrame:
+    def build_tophat_filter(
+            cwl: Union[np.array, float],
+            fwhm: Union[np.array,float]) -> np.array:
+        """Build Top-Hat filter profiles according to the given cwl, fwhm and
+        wvls, in parallel.
+
+        :param cwl: Centre wavelength(s) (nm)
+        :type cwl: np.array
+        :param fwhm: Full-Width at Half Maximum(s) (nm)
+        :type fwhm: np.array
+        :returns: table of Top-Hat transmission profile data
+        :rtype: np.array
+        """        
+        # vectorisation: extend cwls, sigs & wvls to match dimensions
+        cwls = np.tile(cwl, [cfg.WVLS.shape[0],1])
+        lower = np.tile(cwl - fwhm/2, [cfg.WVLS.shape[0],1])
+        upper = np.tile(cwl + fwhm/2, [cfg.WVLS.shape[0],1])
+        wvls = np.tile(cfg.WVLS, [cwls.shape[1],1]).transpose()
+        transmission = np.where((wvls > lower) & (wvls < upper), 1.0, 0.0) 
+        return transmission.transpose()
+
+    @staticmethod
+    def build_instrument_df(inst_df: pd.DataFrame, shape: str='gauss') -> pd.DataFrame:
         """Builds instrument transmission profiles for filter cwls and fwhms
         using a Gaussian function, and returns in a DataFrame.
 
@@ -187,7 +211,10 @@ class Instrument():
             # build each filter in the instrument in parallel
             cwls = inst_df['cwl'].values
             fwhms = inst_df['fwhm'].values
-            out = Instrument.build_gauss_filter(cwls, fwhms)
+            if shape == 'gauss':
+                out = Instrument.build_gauss_filter(cwls, fwhms)
+            elif shape == 'tophat':
+                out = Instrument.build_tophat_filter(cwls, fwhms) 
             # initialise the dataframe according to contents
             init_df =pd.DataFrame(data=out,columns=cfg.WVLS,index=inst_df.index)
         else:

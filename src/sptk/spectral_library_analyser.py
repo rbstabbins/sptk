@@ -90,12 +90,12 @@ class SpectralLibraryAnalyser():
         refl_df = self.spectra_obj.get_refl_df()
         cat_df = self.spectra_obj.get_cat_df()
         all_df = pd.concat([refl_df, cat_df], axis=1)
-    
+        
         ax = self.render_profile_plot(all_df,
                     scope=scope,
                     with_noise=with_noise,
                     ci=ci)
-
+        axes = [ax]
         if categories_only:
             if cfg.TIME_IT:
                 toc = time.perf_counter()
@@ -118,12 +118,13 @@ class SpectralLibraryAnalyser():
                             scope=scope,
                             with_noise=with_noise,
                             ci=ci)
+                axes.append(ax)
 
         if cfg.TIME_IT:
             toc = time.perf_counter()
             print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
 
-        return ax
+        return axes
 
     def render_profile_plot(self,
             data_df: pd.DataFrame,

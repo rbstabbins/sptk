@@ -153,9 +153,8 @@ class Observation():
         return main_df
 
     def add_noise(self,
-            noise: float,
-            n_duplicates: int,
-            noise_type: str = 'shot',
+            snr: float,
+            n_duplicates: int,            
             apply: bool = True) -> pd.DataFrame:
         """Add n_duplicates of noisey entries to the sampled data,
         under assumption of Gaussian distribution of noise, given by 1-sigma
@@ -169,8 +168,8 @@ class Observation():
             valid for typical natural illumination conditions, and thus the
             Poissonian shot noise can be approximated with a Gaussian.
 
-        :param noise: instrument noise (in reflectance units)
-        :type noise: float
+        :param snr: instrument signal-to-noise ratio
+        :type snr: float
         :param n_duplicates: number of noisy entries to add to the data
         :type n_duplicates: int
         :param noise_type: determine if dominant noise is shot or thermal,
@@ -183,14 +182,9 @@ class Observation():
         """
         # access the observation dataframe and make duplicates of each entry
         obs_df = pd.concat([self.main_df]*n_duplicates).sort_index()
-        # apply noise to the duplicate entries
-        if noise_type == 'shot':
-            sig = obs_df[self.wvls].to_numpy()*noise
-            noise_array = np.random.normal(0.0, sig, obs_df[self.wvls].shape)
-        elif noise_type == 'thermal':
-            noise_array = np.random.normal(0.0, noise, obs_df[self.wvls].shape)
-        else:
-            raise ValueError(f'{noise_type} noise_type not recognised.')
+        # apply noise to the duplicate entries        
+        noise = obs_df[self.wvls].to_numpy()/snr
+        noise_array = np.random.normal(0.0, noise, obs_df[self.wvls].shape)
 
         obs_df[self.wvls] = obs_df[self.wvls] + noise_array # update dataframe
         obs_df[self.wvls].clip(lower = 0.0, inplace=True) # clip to range

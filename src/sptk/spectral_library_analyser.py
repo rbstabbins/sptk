@@ -89,6 +89,8 @@ class SpectralLibraryAnalyser():
         # get the reflectance data for all minerals and for each category
         refl_df = self.spectra_obj.get_refl_df()
         cat_df = self.spectra_obj.get_cat_df()
+
+        # incorporate error DF into this data for plotting
         all_df = pd.concat([refl_df, cat_df], axis=1)
         
         ax = self.render_profile_plot(all_df,
@@ -163,7 +165,7 @@ class SpectralLibraryAnalyser():
 
         fig_size = (1.3*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
         fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI)
-        y_max = max([1.0, data_df.value.max()])
+        # y_max = max([1.0, data_df.value.max()])
 
         if cat == 'all':
             hue_flag = 'Category'

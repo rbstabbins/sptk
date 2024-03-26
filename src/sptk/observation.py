@@ -86,6 +86,7 @@ class Observation():
                             material_collection,
                             instrument,
                             self.wvls)
+                self.error_df = self.compute_uncertainty() # TODO handle mising SNR
         else:
             print("Building new Observation DataFrame  \
                                                 for % r..." % self.project_name)
@@ -93,6 +94,7 @@ class Observation():
                         material_collection,
                         instrument,
                         self.wvls)
+            self.error_df = self.compute_uncertainty() # TODO handle missing SNR
 
         if export_df:
             self.export_main_df()
@@ -150,11 +152,26 @@ class Observation():
         hdr_df = material_collection.get_hdr_df()
         hdr_df['Reflectance'] = '---'
         main_df = pd.concat([cat_df, hdr_df, main_df], axis=1)
+
         return main_df
 
+    def compute_uncertainty(self) -> pd.DataFrame:
+        """Compute the uncertainty of the observation data, given the
+        instrument SNR.
+
+        :return: uncertainty of the observation data
+        :rtype: pd.DataFrame
+        """
+        error_df = self.main_df.copy()
+        snrs = pd.Series(index=self.instrument.main_df['cwl'].values, data=self.instrument.main_df['snr'].values)
+        noise = error_df[self.wvls].to_numpy()/snrs.to_numpy()
+        error_df[self.wvls] = noise
+        error_df.rename(columns={'Reflectance':'Reflectance Std. Dev.'}, inplace=True)
+        return error_df
+
     def add_noise(self,
-            snr: float,
             n_duplicates: int,            
+            snr: float=None,
             apply: bool = True) -> pd.DataFrame:
         """Add n_duplicates of noisey entries to the sampled data,
         under assumption of Gaussian distribution of noise, given by 1-sigma
@@ -182,7 +199,9 @@ class Observation():
         """
         # access the observation dataframe and make duplicates of each entry
         obs_df = pd.concat([self.main_df]*n_duplicates).sort_index()
-        # apply noise to the duplicate entries        
+        # apply noise to the duplicate entries  
+        if snr is None:    
+            snr = self.instrument.main_df['snr'].to_numpy()  
         noise = obs_df[self.wvls].to_numpy()/snr
         noise_array = np.random.normal(0.0, noise, obs_df[self.wvls].shape)
 
@@ -874,8 +893,9 @@ class Observation():
 
         print('Observation export complete.')
 
-    def plot_profiles(self, categories_only: bool=False, ci: bool=False):
+    def plot_profiles(self, categories_only: bool=False, ci: bool=False) -> List[plt.Axes]:
         """Plot the profiles of the materials as sampled by the instrument
         """
         plotter = SpectralLibraryAnalyser(self)
-        plotter.plot_profiles(categories_only=categories_only, ci=ci)
+        axes = plotter.plot_profiles(categories_only=categories_only, ci=ci)
+        return axes

@@ -248,6 +248,9 @@ class Instrument():
             inst_df.index.rename('filter_id', inplace=True)
             inst_df = inst_df.rename(columns={0:'cwl'})
             inst_df['fwhm'] = fwhms
+            # if 'snr' in inst_df.columns:
+            #     inst_df['snr'] = snrs
+
         # concat with cwl and fwhm information (via inst_df)
         main_df = pd.merge(
                     left=inst_df,
@@ -263,7 +266,7 @@ class Instrument():
         :return: copy of the master instrument transmission DataFrame
         :rtype: pd.DataFrame
         """
-        trans_df = self.main_df.iloc[:, 2:]
+        trans_df = self.main_df[cfg.WVLS] # fix this to get wavelength column names instead of hardcoding
         return trans_df.copy()
 
     def cwls(self) -> pd.Series:
@@ -312,8 +315,12 @@ class Instrument():
         """Plot all filter profiles
         """
         print('Plotting Instrument Transmission...')
-        trans_df = pd.melt(self.main_df.reset_index(),
-                            id_vars=['cwl', 'fwhm', 'filter_id'])
+        if 'snr' in self.main_df.columns:
+            trans_df = pd.melt(self.main_df.reset_index(),
+                                id_vars=['cwl', 'fwhm', 'snr','filter_id'])
+        else:
+            trans_df = pd.melt(self.main_df.reset_index(),
+                                id_vars=['cwl', 'fwhm', 'filter_id'])
         fltr_ax_size = (1.3*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
         fig, fltr_ax = plt.subplots(figsize=fltr_ax_size, dpi=cfg.DPI)
         plt.rcParams.update({'font.size': 8})

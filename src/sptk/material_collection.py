@@ -729,5 +729,5 @@ class MaterialCollection():
         """Plot the profiles of the materials
         """
         plotter = SpectralLibraryAnalyser(self)
-        ax = plotter.plot_profiles(categories_only=categories_only, ci=ci)
-        return ax
+        axes = plotter.plot_profiles(categories_only=categories_only, ci=ci)
+        return axes

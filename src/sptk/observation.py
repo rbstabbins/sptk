@@ -86,7 +86,7 @@ class Observation():
                             material_collection,
                             instrument,
                             self.wvls)
-                self.error_df = self.compute_uncertainty() # TODO handle mising SNR
+                # self.error_df = self.compute_uncertainty() # TODO handle mising SNR
         else:
             print("Building new Observation DataFrame  \
                                                 for % r..." % self.project_name)
@@ -94,7 +94,7 @@ class Observation():
                         material_collection,
                         instrument,
                         self.wvls)
-            self.error_df = self.compute_uncertainty() # TODO handle missing SNR
+            # self.error_df = self.compute_uncertainty() # TODO handle missing SNR
 
         if export_df:
             self.export_main_df()

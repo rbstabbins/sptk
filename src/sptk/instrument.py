@@ -17,6 +17,7 @@ import glob
 from  shutil import rmtree
 import time
 from typing import Dict, List, Union
+import colour
 import pandas as pd
 import numpy as np
 import matplotlib as mpl
@@ -225,6 +226,12 @@ class Instrument():
             trans_in = inst_df.to_numpy().astype('float64')
             trans_func = interp1d(wvls_in, trans_in.T, bounds_error=False)
             out = trans_func(cfg.WVLS)
+            # TODO check that the input wavelengths match or exceed the simulation wavelengths, and deal with it if not.
+            # Quick fix - set all NaN values to 0
+            out = np.where(np.isnan(out), 0, out)
+            
+            # Normalise to the overall max value
+            out = out / out.max()
 
             # initialise the dataframe according to contents
             init_df = pd.DataFrame(
@@ -328,13 +335,34 @@ class Instrument():
             xbound=(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10),
             ybound=(-0.05,1.15),
             autoscale_on=False)
+        
+        # set colours for the filters
+        # this method hasn't worked at all, where I was trying to 
+        sds = colour.MultiSpectralDistributions(self.get_trans_df().T)
+        illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
+        xyz = colour.sd_to_XYZ(sds, illuminant=illum) # convert to XYZ space
+        xyz = xyz / np.sum(xyz, axis=1)[:,None]
+        rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB        
+
+        if np.any(rgb < 0):
+            # We're not in the RGB gamut: approximate by desaturating
+            w = - np.min(rgb)
+            rgb += w
+        if not np.all(rgb==0):
+            # Normalize the rgb vector
+            rgb /= np.max(rgb)
+
+        cwl_colours = sns.color_palette(rgb)
+
+        sns.palplot(cwl_colours)
+
         sns.lineplot(
             data=trans_df,
             x='variable',
             y='value',
             ax=fltr_ax,
             hue='cwl',
-            palette='nipy_spectral',
+            palette=cwl_colours,
             linewidth=0.6,
             legend="full")
         fltr_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
@@ -584,9 +612,9 @@ class InstrumentBuilder:
 
     @staticmethod
     def aotf_cwl_2_fwhm(
-        cwl: Union[np.float, np.array],
+        cwl: Union[float, np.array],
         resolution_model: Dict,
-        ) -> Union[np.float, np.array]:
+        ) -> Union[float, np.array]:
         """Compute the fwhm (nm) given a cwl (nm)
 
         :param cwl: central wavelength (nm) to compute fwhm at
@@ -595,7 +623,7 @@ class InstrumentBuilder:
             spectral resolving power
         :type resolution_per_wavenumber: dict
         :return: full-width at half-maximum(maxima), for central wavelength(s)
-        :rtype: Union[np.float, np.array]
+        :rtype: Union[float, np.array]
         """
         cwn = 1E7 / cwl # cm^-1
         resolution_per_wavenumber = resolution_model['m'] # 1/cm^-1

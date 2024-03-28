@@ -16,5 +16,11 @@ dependencies:
   - seaborn=0.12.2
   - statsmodels=0.13.2
   - tabulate=0.8.10
+  - tabulate
+  - spectral
+  - plotnine
+  - xgboost=0.72.1
+  - lightgbm=2.1.2
+  - cvxopt
   - pip:
       - pysptools=0.15.0

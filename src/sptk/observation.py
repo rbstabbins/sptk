@@ -171,7 +171,8 @@ class Observation():
 
     def add_noise(self,
             n_duplicates: int,            
-            snr: float=None,
+            snr: Union[float, np.array]=None,   
+            spd: np.array = None,         
             apply: bool = True) -> pd.DataFrame:
         """Add n_duplicates of noisey entries to the sampled data,
         under assumption of Gaussian distribution of noise, given by 1-sigma
@@ -189,20 +190,27 @@ class Observation():
         :type snr: float
         :param n_duplicates: number of noisy entries to add to the data
         :type n_duplicates: int
-        :param noise_type: determine if dominant noise is shot or thermal,
-            defaults to shot
-        :type noise_type: str
+        :param spd: the spectral power distribution over which the SNR is defined
+        :type spd: np.array
         :param apply: apply the noise to the object main_df, defaults to True
         :type apply: bool
         :return: the main dataframe
         :type return: pd.DataFrame
         """
         # access the observation dataframe and make duplicates of each entry
-        obs_df = pd.concat([self.main_df]*n_duplicates).sort_index()
+        obs_df = pd.concat([self.main_df].copy()*n_duplicates).sort_index()
         # apply noise to the duplicate entries  
         if snr is None:    
             snr = self.instrument.main_df['snr'].to_numpy()  
-        noise = obs_df[self.wvls].to_numpy()/snr
+        
+        if spd is not None:
+            # assume that the SNR is defined observations with relfectance given
+            # by the values of the SPD in each channel. Scale the reflectance
+            # noise according to the signal expected in each channel relative
+            # to this.
+            noise = np.divide(np.sqrt(obs_df[self.wvls].to_numpy()), snr)
+        else:
+            noise = obs_df[self.wvls].to_numpy()/snr        
         noise_array = np.random.normal(0.0, noise, obs_df[self.wvls].shape)
 
         obs_df[self.wvls] = obs_df[self.wvls] + noise_array # update dataframe

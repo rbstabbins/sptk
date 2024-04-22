@@ -23,6 +23,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python= "^3.10.8"
 click= "==8.1"
+colour-science= "==0.4.4"
 ipykernel= "^6.17.0"
 matplotlib= "==3.6.2"
 numpy= "==1.23.5"
@@ -35,7 +36,6 @@ statsmodels= "==0.13.2"
 tabulate= "==0.8.10"
 toml= "^0.10.2"
 pysptools= "==0.15.0"
-
 [tool.coverage.run]
 source = ["src"]
 

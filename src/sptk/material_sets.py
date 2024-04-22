@@ -64,7 +64,7 @@ MICA_SET = {
     ],
     'hydrated silicates & halides': [
         ('hydrated-silica', '*'),
-        ('halite', '*'),
+        ('halite_mica', '*'),
         ('epidote', '*'),
         ('analcime', '*'),
         ('chloride', '*'),

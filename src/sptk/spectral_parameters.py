@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from  shutil import rmtree
 import time
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -175,7 +175,7 @@ class SpectralParameters():
         return self.main_df.Category.unique().to_list()
 
     @staticmethod
-    def parse_sp_lbls(sp_list: List, sp_type: str) -> List:
+    def parse_sp_lbls(sp_list: List, sp_type: Literal['channel', 'ratio', 'slope', 'band_depth', 'shoulder_height']) -> List:
         """Parse a list of spectral parameters from an input file to lists
         of each type of spectral parameter.
 
@@ -774,6 +774,8 @@ class SpectralParameters():
                 bd_df, id_vars='Category', var_name='spectral_parameter')
             # get number of wavelengths greater than the ce_wvl
             width = len(ce_wvl_lst[ce_wvl_lst > ce_wvl]) + 1
+            if width == 1:
+                width = 2 # hack to stop legend squeezing x-axis for 1-width case
             g = sns.FacetGrid(
                     bd_df_mlt,
                     col='spectral_parameter',
@@ -797,7 +799,7 @@ class SpectralParameters():
             title_pad = 2.0 * 8.0 * 1.0/72.0 #2xtitle-fontsize x title size 1/72
             scale = 1.0 + title_pad / height
             g.fig.suptitle(ce_wvl+' nm Band Depth Spectral Parameters',
-                           size='medium', y=scale)
+                           size='medium', y=scale)            
             # save / export
             Path(self.project_dir / 'observation' / 'feature_histograms'
                 ).mkdir(parents=True, exist_ok=True)
@@ -830,6 +832,8 @@ class SpectralParameters():
                                 var_name='spectral_parameter')
             # get number of wavelengths greater than the ce_wvl
             width = len(ce_wvl_lst[ce_wvl_lst > ce_wvl]) + 1
+            if width == 1:
+                width = 2 # hack to stop legend squeezing x-axis for 1-width case
             # make facet grid to host the plots
             g = sns.FacetGrid(
                     sh_df_mlt,

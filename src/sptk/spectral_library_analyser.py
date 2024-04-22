@@ -163,7 +163,7 @@ class SpectralLibraryAnalyser():
         else:
             sfx = ''
 
-        fig_size = (1.3*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+        fig_size = (1.2*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
         fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI)
         # y_max = max([1.0, data_df.value.max()])
 
@@ -209,6 +209,7 @@ class SpectralLibraryAnalyser():
                 lw=0.5, markers=marker_flag,
                 ax=ax)
 
+        ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         ax.set_ylabel('Reflectance', fontsize=cfg.LABEL_S)
         # add minor grid lines at 50 nm intervals and major gridlines
@@ -216,7 +217,7 @@ class SpectralLibraryAnalyser():
         ax.grid(True, which='major',axis='both', lw=0.6)
         ax.grid(True, which='minor',axis='both', lw=0.3)
 
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left")
         # ax.legend(loc='upper right')
         plt.setp(ax.get_legend().get_texts(), fontsize=cfg.LEGEND_S)
         plt.setp(ax.get_legend().get_title(), fontsize=cfg.LEGEND_S)
@@ -226,9 +227,9 @@ class SpectralLibraryAnalyser():
         if self.obj_type == 'observation':
             leg_title = f'Class: {cat}, Group: {mnrl} ({scope} data) - sampled'
             if ci:
-                title = 'Mean ± 1σ Sampled Spectral Library'
-            else:
-                title = 'Instrument Sampled Spectral Library'
+                title = f'Mean ± 1σ {self.spectra_obj.instrument.name} Sampled Spectral Library'
+            else:                
+                title = f'{self.spectra_obj.instrument.name} Sampled Spectral Library'
         else:
             leg_title = f'Class: {cat}, Group: {mnrl} ({scope} data)'
             title = 'High-Resolution Spectral Library'
@@ -247,7 +248,8 @@ class SpectralLibraryAnalyser():
                 fontsize='xx-small')
             leg.set_title(leg_title, prop={'size': 'x-small'})
 
-        fig.tight_layout()
+        # ax.legend().set_in_layout(False)
+        # fig.tight_layout()
         # if cat != 'all':
         #     try:
         #         figl.tight_layout()

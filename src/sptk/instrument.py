@@ -336,25 +336,32 @@ class Instrument():
             ybound=(-0.05,1.15),
             autoscale_on=False)
         
-        # set colours for the filters
-        # this method hasn't worked at all, where I was trying to 
-        sds = colour.MultiSpectralDistributions(self.get_trans_df().T)
+        # set colours for the filters        
+        norm_trans = self.get_trans_df().T
+        sds = colour.MultiSpectralDistributions(norm_trans)    
+        # normalise the spds
+        # sds = sds / np.sum(sds, axis=1)[:,None]
+            
         illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
-        xyz = colour.sd_to_XYZ(sds, illuminant=illum) # convert to XYZ space
-        xyz = xyz / np.sum(xyz, axis=1)[:,None]
-        rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB        
-
-        if np.any(rgb < 0):
-            # We're not in the RGB gamut: approximate by desaturating
-            w = - np.min(rgb)
-            rgb += w
+        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1.0)/100 # convert to XYZ space
+        # xyz = xyz / np.sum(xyz, axis=1)[:,None]
+        # xyz = xyz.clip(0,100) # clip to 0-1 range
+        rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB    
+        rgb = rgb.clip(0,1) # clip to 0-1 range
+            
+        # if np.any(rgb < 0):
+        #     # We're not in the RGB gamut: approximate by desaturating
+        #     w = - np.min(rgb, axis=0)
+        #     rgb = rgb + w
         if not np.all(rgb==0):
             # Normalize the rgb vector
             rgb /= np.max(rgb)
 
-        cwl_colours = sns.color_palette(rgb)
+        # just do central wavelength to XYZ
+        # xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
+        # colour.plotting.plot_single_sd(sds[:,0])
 
-        sns.palplot(cwl_colours)
+        cwl_colours = sns.color_palette(rgb)
 
         sns.lineplot(
             data=trans_df,

@@ -230,7 +230,7 @@ class Instrument():
             # Quick fix - set all NaN values to 0
             out = np.where(np.isnan(out), 0, out)
             
-            # Normalise to the overall max value
+            # Normalise to the overall max value (should this be for each channel??)
             out = out / out.max()
 
             # initialise the dataframe according to contents
@@ -241,13 +241,16 @@ class Instrument():
             init_df.index.rename('filter_id')
 
             # get CWl and FWHM values
-            cwls = np.sum((out*cfg.WVLS),axis=1) / np.sum((out),axis=1)
+            enrgy_count = init_df * init_df.columns
+            norm_enrgy_count = (enrgy_count.T / enrgy_count.max(axis=1)).T
+
+            cwls = np.sum((norm_enrgy_count*cfg.WVLS),axis=1) / np.sum((norm_enrgy_count),axis=1)
             cwls = np.round(cwls)
 
-            half_maxima = init_df.max(axis=1)/2
-            limits = np.greater(out.T, half_maxima.to_numpy().T).T
-            fwhms = np.zeros(len(half_maxima))
-            for channel in range(len(half_maxima)):
+            half_maxima = 0.5
+            limits = np.greater(norm_enrgy_count.T, half_maxima).T.to_numpy()
+            fwhms = np.zeros(len(cwls))
+            for channel in range(len(cwls)):
                 wvls_above_hmax = cfg.WVLS[limits[channel]]
                 fwhms[channel] = wvls_above_hmax[-1] - wvls_above_hmax[0]
 
@@ -368,7 +371,7 @@ class Instrument():
             x='variable',
             y='value',
             ax=fltr_ax,
-            hue='cwl',
+            hue='filter_id',
             palette=cwl_colours,
             linewidth=0.6,
             legend="full")

@@ -11,20 +11,20 @@ import sptk.linear_discriminant_analysis as lda
 iris = datasets.load_iris()
 # put dataset in a pandas dataframe
 df = pd.DataFrame(
-        data=np.c_[iris.data, iris.target.astype(int)],
-        columns=iris.feature_names + ['class label'])
+        data=np.c_[iris['data'], iris['target'].astype(int)],
+        columns=iris['feature_names'] + ['class label'])
 label_dict = {0: 'Setosa', 1: 'Versicolor', 2:'Virginica'}
 class_labels = list(label_dict.values())
-df = df.replace({'class label': label_dict})
+df.replace({'class label': label_dict}, inplace=True)
 
 # format IRIS dataset to [n_entries, n_features] numpy array,
 # with accompanying list of classes given by 'categories'
-dataset = df[iris.feature_names].to_numpy()
-n_features = len(iris.feature_names)
+dataset = df[iris['feature_names']].to_numpy()
+n_features = len(iris['feature_names'])
 categories = df['class label']
 
 # test within class scatter
-S_W = lda.within_class_scatter_matrix(dataset, categories, n_features)
+S_W = lda.within_class_scatter_matrix(dataset, categories)
 print('Within-Class Scatter Matrix: ')
 print(S_W.squeeze())
 # expected within-class scatter matrix
@@ -36,7 +36,7 @@ print("[  5.6556   4.9132   6.2536   6.1756]]")
 
 # test between class scatter
 print('Between-Class Scatter Matrix: ')
-S_B = lda.between_class_scatter_matrix(dataset, categories, n_features)
+S_B = lda.between_class_scatter_matrix(dataset, categories)
 print(S_B)
 print("Expected Between-Class Scatter Matrix:")
 print("[[  63.2121  -19.534   165.1647   71.3631]")

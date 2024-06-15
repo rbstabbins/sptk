@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 from scipy import linalg
 from sklearn import datasets
-import sptk.linear_discriminant_analysis as lda
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.discriminant_analysis import _cov
+import sptk.linear_discriminant_analysis as lda
 
 def load_test_data():
     """_summary_
@@ -20,16 +20,15 @@ def load_test_data():
     iris = datasets.load_iris()
     # put dataset in a pandas dataframe
     df = pd.DataFrame(
-            data=np.c_[iris.data, iris.target.astype(int)],
-            columns=iris.feature_names + ['class label'])
+            data=np.c_[iris['data'], iris['target'].astype(int)],
+            columns=iris['feature_names'] + ['class label'])
     label_dict = {0: 'Setosa', 1: 'Versicolor', 2:'Virginica'}
     class_labels = list(label_dict.values())
-    df = df.replace({'class label': label_dict})
+    df.replace({'class label': label_dict}, inplace=True)
 
     # format IRIS dataset to [n_entries, n_features] numpy array,
     # with accompanying list of classes given by 'categories'
-    dataset = df[iris.feature_names].to_numpy()
-    n_features = len(iris.feature_names)
+    dataset = df[iris['feature_names']].to_numpy()
     categories = df['class label']
 
     return dataset, categories, class_labels
@@ -88,7 +87,7 @@ class TestLinearDiscriminantAnalysis(unittest.TestCase):
         n_c = len(class_labels)
         wcsm = lda.within_class_scatter_matrix(dataset, categories)
         bcsm = lda.between_class_scatter_matrix(dataset, categories)        
-        A, tst_eig_vcs, tst_eig_vls = lda.projection_matrix(wcsm, bcsm, n_c)
+        _, tst_eig_vcs, tst_eig_vls = lda.projection_matrix(wcsm, bcsm, n_c)
 
         with self.subTest('valid eigen-vectors'):
             for i in range(0, dataset.shape[1]):

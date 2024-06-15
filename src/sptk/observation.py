@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from shutil import rmtree
 import time
-from typing import List, Union
+from typing import List, Union, Tuple, Literal
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -907,3 +907,13 @@ class Observation():
         plotter = SpectralLibraryAnalyser(self)
         axes = plotter.plot_profiles(categories_only=categories_only, ci=ci)
         return axes
+    
+    def render_colour(self, 
+            illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65'
+            ) -> Tuple[pd.DataFrame, plt.figure]:
+        """Render the colour of the material collection under the specified
+        illuminant.
+        """
+        plotter = SpectralLibraryAnalyser(self)
+        colour_df, fig = plotter.render_colour(illuminant)
+        return colour_df, fig

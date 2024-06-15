@@ -13,7 +13,7 @@ import glob
 import time
 from pathlib import Path
 from  shutil import rmtree
-from typing import Dict, List
+from typing import Dict, List, Tuple, Literal
 import click
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -731,3 +731,13 @@ class MaterialCollection():
         plotter = SpectralLibraryAnalyser(self)
         axes = plotter.plot_profiles(categories_only=categories_only, ci=ci)
         return axes
+    
+    def render_colour(self, 
+            illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65'
+            ) -> Tuple[pd.DataFrame, plt.figure]:
+        """Render the colour of the material collection under the specified
+        illuminant.
+        """
+        plotter = SpectralLibraryAnalyser(self)
+        colour_df, fig = plotter.render_colour(illuminant)
+        return colour_df, fig

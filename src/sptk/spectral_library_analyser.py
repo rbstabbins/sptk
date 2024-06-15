@@ -13,6 +13,8 @@ from ast import literal_eval
 import copy
 import os
 import time
+from typing import Literal, Tuple
+import colour
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -144,15 +146,16 @@ class SpectralLibraryAnalyser():
         :type cat: str, optional
         :param mnrl: Mineral Name, defaults to 'entries'
         :type mnrl: str, optional
-        :param ci: Plot mean spectra with condifence interval, defaults to False
+        :param ci: Plot mean spectra with confidence interval, defaults to False
         :type ci: bool, optional
         :param scope: indicates specific elements or all data, defaults to 'all'
         :type scope: str, optional
-        :param with_noise: INdicates if noise has been added, defaults to False
+        :param with_noise: Indicates if noise has been added, defaults to False
         :type with_noise: bool, optional
         """
 
         data_df = data_df.reset_index()
+        # long form version of plotting, to aggregate data
         data_df =pd.melt(data_df, id_vars=['Data ID','Category'])
 
         out_dir = Path(self.spectra_obj.object_dir / 'plots')
@@ -163,7 +166,9 @@ class SpectralLibraryAnalyser():
         else:
             sfx = ''
 
-        fig_size = (1.2*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+        sns.set_context("paper")
+
+        fig_size = (cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
         fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI)
         # y_max = max([1.0, data_df.value.max()])
 
@@ -177,14 +182,7 @@ class SpectralLibraryAnalyser():
         else:
             marker_flag = False
 
-        plt.rcParams.update({'font.size': 8, 'lines.markersize': 3})
-        ax.set(
-            xbound=(cfg.SAMPLE_RES['wvl_min']-10,cfg.SAMPLE_RES['wvl_max']+10),
-            # ybound=(-0.1, y_max+0.1), # TODO decide if we want this limit removed permanently
-            autoscale_on=True)
-
-        if ci:
-            # long form version of plotting, to aggregate
+        if ci:            
             sns.lineplot(
                 data=data_df,
                 x='variable',
@@ -210,17 +208,14 @@ class SpectralLibraryAnalyser():
                 ax=ax)
 
         ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
-        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
-        ax.set_ylabel('Reflectance', fontsize=cfg.LABEL_S)
+        ax.set_xlabel('Wavelength (nm)')
+        ax.set_ylabel('Reflectance')
         # add minor grid lines at 50 nm intervals and major gridlines
         ax.get_xaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
         ax.grid(True, which='major',axis='both', lw=0.6)
         ax.grid(True, which='minor',axis='both', lw=0.3)
 
-        ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left")
-        # ax.legend(loc='upper right')
-        plt.setp(ax.get_legend().get_texts(), fontsize=cfg.LEGEND_S)
-        plt.setp(ax.get_legend().get_title(), fontsize=cfg.LEGEND_S)
+        ax.legend(loc="upper left", fontsize='x-small')
 
         # plot title
         project_str = self.spectra_obj.project_name.replace('_', ' ')
@@ -233,7 +228,7 @@ class SpectralLibraryAnalyser():
         else:
             leg_title = f'Class: {cat}, Group: {mnrl} ({scope} data)'
             title = 'High-Resolution Spectral Library'
-        plt.title(title, fontsize=cfg.TITLE_S)
+        # plt.title(title, fontsize=cfg.TITLE_S) # update - removing titles from plots
 
         # save legend separately
         if cat != 'all':
@@ -249,7 +244,7 @@ class SpectralLibraryAnalyser():
             leg.set_title(leg_title, prop={'size': 'x-small'})
 
         # ax.legend().set_in_layout(False)
-        # fig.tight_layout()
+        fig.tight_layout()
         # if cat != 'all':
         #     try:
         #         figl.tight_layout()
@@ -268,6 +263,7 @@ class SpectralLibraryAnalyser():
             filename = f'{project_str}_{cat}_{mnrl}_{scope}'+sfx
         output_file = Path(out_dir, filename).with_suffix(cfg.PLT_FRMT)
         fig.savefig(output_file)
+
         if cat != 'all':
             legend_file=Path(out_dir,filename+'_lgnd').with_suffix(cfg.PLT_FRMT)
             figl.savefig(legend_file)
@@ -638,3 +634,58 @@ class SpectralLibraryAnalyser():
         gauss = np.sum(gauss, axis=1)
         # sum over the correct axis to get final profile
         return gauss
+
+    def render_colour(self,
+            illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D50'
+                      ) -> Tuple[pd.DataFrame, plt.figure]:
+        """Render the colour of each spectrum in the spectral library according
+        to the given illuminant.
+
+        :param illuminant: illuminant to use to compute colour, defaults to 'D50'
+        :type illuminant: str, optional
+        :return: Table of colours for each spectrum, and figure of colours
+        :rtype: pd.DataFrame, plt.figure
+        """        
+        # load the spectral library
+        refl_df = self.spectra_obj.get_refl_df()
+
+        # convert the reflectance data to colour-science spectral ditributions
+        sds = colour.MultiSpectralDistributions(refl_df.T)
+        
+        # get the illuminant
+        illum = colour.SDS_ILLUMINANTS[illuminant] # use a D50 standard illuminant
+
+        # convert the spectral distributions to XYZ space
+        # if material collection use ASTM E308, if observation use Integration
+        if self.obj_type == 'observation':
+            method = 'Integration'
+        else:
+            method = 'ASTM E308'
+        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1/100, method=method) # convert to XYZ space
+
+        # convert the XYZ values to sRGB        
+        rgb = colour.XYZ_to_sRGB(xyz)
+
+        rgb = np.clip(rgb, 0, 1)
+        print(rgb)
+        cwl_colours = sns.color_palette(rgb)
+        sns.palplot(cwl_colours)
+
+        srgb_df = pd.DataFrame(rgb, index=refl_df.index)
+        sRGBs = []
+        min_list = refl_df.index.to_list()
+        for min in min_list:            
+            RGB = colour.plotting.ColourSwatch(srgb_df.loc[min], name=min)
+            sRGBs.append(RGB)    
+        colour.plotting.plot_multi_colour_swatches(sRGBs, width=1, height=1, columns=len(min_list) //np.sqrt(len(min_list)), text_kwargs={'size': 6})
+        
+        # # Plotting the post-2014 MacBeth ColorChecker for reference
+        # cc14_sds = colour.SDS_COLOURCHECKERS['babel_average']
+        # cc14_XYZ = colour.sd_to_XYZ(cc14_sds, illuminant)
+        # cc14_RGB = colour.XYZ_to_sRGB(cc14_XYZ / 100)
+        # for min in min_list:            
+        #     RGB = colour.plotting.ColourSwatch(srgb_df.loc[min], name=min)
+        #     sRGBs.append(RGB)    
+        # colour.plotting.plot_multi_colour_swatches(sRGBs, width=1, height=1, columns=len(min_list) //np.sqrt(len(min_list)), text_kwargs={'size': 6})
+
+        return None, None

@@ -10,7 +10,7 @@ Date: 18-05-2022
 """
 import os
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Literal
 import numpy as np
 
 TIME_IT = False # report process durations
@@ -31,7 +31,7 @@ PLOT_PROFILES = True
 CM = 1/2.54  # set scale factor for specifying fig size in cms
 FIG_SIZE = (8*CM, 7*CM)
 DPI = 300
-PLT_FRMT = '.png' # '.png' or '.pdf'
+PLT_FRMT = '.pdf' # '.png' or '.pdf' or '.eps' etc.
 LABEL_S = 8
 TITLE_S = 10
 LEGEND_S = 6
@@ -41,6 +41,22 @@ EXPORT_DF = True
 LOAD_EXISTING = True # if True load existing directories, else build new
 DATA_DIRECTORY = Path('..', 'data')
 OUTPUT_DIRECTORY = Path('..', 'projects')
+
+def update_sample_res(key: Literal['wvl_min', 'wvl_max', 'delta_wvl'], value: int) -> None:
+    """Update the Sample Resolution for the given instance of SPTK.
+
+    :param key: Key of the SAMPLE_RES dictionary to update
+    :type key: Literal[wvl_min, wvl_max, delta_wvl]
+    :param value: Value to update the key with
+    :type value: int
+    """    
+    SAMPLE_RES[key] = value
+    global WVLS
+    WVLS = np.arange(
+            SAMPLE_RES['wvl_min'],
+            SAMPLE_RES['wvl_max'],
+            SAMPLE_RES['delta_wvl'],
+            dtype=float)
 
 def build_project_directory(
         project_name: str,

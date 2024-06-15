@@ -11,7 +11,6 @@ Date: 25-05-2021
 """
 from typing import Tuple
 import numpy as np
-from scipy import linalg
 import pandas as pd
 
 def within_class_scatter_matrix(
@@ -151,11 +150,14 @@ def projection_matrix(
     singular_mask = singular_spcs # new way of filtering spcs
     if singular_mask is None:
         singular_mask = np.zeros(n_combinations, dtype=bool)
+    else:
+        singular_mask = np.array(singular_spcs, dtype=bool)
     projection[singular_mask,0,:] = 1.0
 
     # solve eigen-problem
-    nonsing_inv_s_w = np.linalg.inv(wcsm[~singular_mask])
-    nonsing_s_b = bcsm[~singular_mask]
+    inverted_mask = ~singular_mask
+    nonsing_inv_s_w = np.linalg.inv(wcsm[inverted_mask])
+    nonsing_s_b = bcsm[inverted_mask]
     eig_vals, eig_vecs = np.linalg.eig(np.matmul(nonsing_inv_s_w, nonsing_s_b))
     eig_vals = eig_vals.real # get real values only
     eig_vecs = eig_vecs.real # get real values only
@@ -168,7 +170,7 @@ def projection_matrix(
 
     # Get the n_classes - 1 largest eigenvalue associated eigenvectors and
     # put in projection matrix
-    projection[~singular_mask] = eig_vecs[:,:,0:n_classes-1].copy()
+    projection[inverted_mask] = eig_vecs[:,:,0:n_classes-1].copy()
 
     return projection, eig_vecs, eig_vals
 

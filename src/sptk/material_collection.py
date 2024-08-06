@@ -331,7 +331,7 @@ class MaterialCollection():
         wvls_in = mtrl_refl_in.index.to_numpy().astype('float64')
 
         # perform interpolation; put NaN in bad values
-        refl_in = mtrl_refl_in.to_numpy().astype('float64')
+        refl_in = mtrl_refl_in.to_numpy().astype('float64')        
         refl_in = np.reshape(refl_in, len(refl_in))
         refl_func = interp1d(wvls_in, refl_in, bounds_error=False)
         refl_interp = refl_func(cfg.WVLS)

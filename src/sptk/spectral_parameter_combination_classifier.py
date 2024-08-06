@@ -1212,7 +1212,7 @@ class SpectralParameterCombinationClassifier():
         elif n_uniq_sps == 2:
             x_feat = spc_df['sp_0'][spc_id]
             y_feat = spc_df['sp_1'][spc_id]
-
+            plt.rcParams.update({"figure.dpi": cfg.DPI, "figure.figsize": cfg.FIG_SIZE})
             g = sns.jointplot(
                     data=sp_data,
                     x=x_feat,
@@ -1263,6 +1263,7 @@ class SpectralParameterCombinationClassifier():
                     fontsize=cfg.LEGEND_S,
                     fontdict={'family': 'serif'},
                     bbox=dict(facecolor='white', alpha=0.8))
+            ax.set
 
         # Pair-plots of scatterplots of pairs of unique spectral parameters
         elif n_uniq_sps > 2:
@@ -1582,7 +1583,7 @@ class SpectralParameterCombinationClassifier():
         roc.set_xlabel('1 - Mean Specificity (FPR)')
         roc.set_ylabel('Mean Sensitivity (TPR)')
         ax.get_legend().remove()
-        cbar = ax.figure.colorbar(smap, label=cbar_lbl)
+        cbar = plt.colorbar(mappable=smap, ax=ax, label=cbar_lbl)
         cbar.ax.tick_params(labelsize=cfg.LEGEND_S)
 
         # export
@@ -1684,7 +1685,7 @@ class SpectralParameterCombinationClassifier():
         mvp.set_xscale('log')
         # ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
         ax.get_legend().remove()
-        cbar = ax.figure.colorbar(smap, label='Mean '+ hue_label)
+        cbar = plt.colorbar(mappable=smap, ax=ax, label='Mean '+ hue_label)
         cbar.ax.tick_params(labelsize=cfg.LEGEND_S)
 
         # export

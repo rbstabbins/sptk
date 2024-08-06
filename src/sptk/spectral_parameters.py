@@ -217,6 +217,8 @@ class SpectralParameters():
             print('Computing '+scope+' spectral parameters...')
         if scope in ('all', 'ratio'):
             self.compute_ratio_permutations()
+        if scope in ('all', 'ratio'):
+            self.compute_ratio_permutations()
         if scope in ('all', 'slope'):
             self.compute_slope_permutations()
         if scope in ('all', 'band_depth'):
@@ -674,7 +676,8 @@ class SpectralParameters():
         ratio_df = self.main_df[self.ratio_lbls + ['Category']]
         ratio_df = ratio_df.reset_index(drop=True)
         ratio_df_mlt = pd.melt(
-            ratio_df, id_vars='Category', var_name='spectral_parameter')
+            ratio_df, id_vars='Category', var_name='spectral_parameter')   
+        ratio_df_mlt['value'] = np.log10(ratio_df_mlt['value'])
         plt.rcParams.update({'font.size': 8})
         # make a FacetGrid object for the plotting
         g = sns.FacetGrid(
@@ -686,6 +689,7 @@ class SpectralParameters():
                 height=4*cfg.CM,
                 aspect=1,
                 legend_out=True)
+        # g.map(plt.hist, 'spectral_parameter').set(xscale = 'log')
         # get bin positions from dataset
         data_for_hist = [
             ratio_df_mlt.loc[ratio_df_mlt['Category']==cat, 'value'].to_numpy()
@@ -693,7 +697,7 @@ class SpectralParameters():
         bins = np.histogram(np.hstack(data_for_hist), bins=20)[1] #get bin edges
         g.map_dataframe(sns.histplot, x="value", bins=bins, common_bins=True)
         g.add_legend()
-        g.set_axis_labels('Ratio', 'Count')
+        g.set_axis_labels('Log Ratio', 'Count')
         g.set_titles(col_template="{col_name}")
         # calculate amount to adjust the figure by to accomodate the title
         height = g.fig.get_size_inches()[1] # get the figure size

@@ -61,7 +61,7 @@ class Observation():
         if cfg.TIME_IT:
             tic = time.perf_counter()
 
-        p_dir, p_name = build_pd(material_collection.project_name,'observation')
+        p_dir, p_name = build_pd(instrument.project_name,'observation')
         self.project_dir = p_dir
         self.project_name = p_name
         self.object_dir = Path(self.project_dir / 'observation')
@@ -72,6 +72,8 @@ class Observation():
         self.instrument = instrument
         self.wvls = self.instrument.cwls().to_numpy() # set to channel cwls
         self.chnl_lbls = ['R' + str(s) for s in self.wvls] #label as R[cwl]
+
+        self.noisy = False # flag for noisy data
 
         if load_existing:
             existing_pkl_path = Path(self.object_dir, 'observation.pkl')
@@ -222,6 +224,7 @@ class Observation():
 
         if apply:
             self.main_df = obs_df # update the main_df
+            self.noisy = True # update the noisy flag
 
         return obs_df
 
@@ -829,7 +832,7 @@ class Observation():
         subset_df = self.get_subset_df(category, mineral_name)
         cat_df = pd.DataFrame(subset_df.Category)
         return cat_df
-
+    
     def get_mineral_list(self,
             category: str=None,
             unique: bool=False) -> List:
@@ -883,7 +886,7 @@ class Observation():
     # Export functions
     # """
 
-    def export_main_df(self):
+    def export_main_df(self, average_duplicates: bool=False) -> None:
         """Export the dataframe to csv file, and pickle.
 
         :param pkl_only: Only output a pkl file of the DataFrame
@@ -898,6 +901,10 @@ class Observation():
 
         csv_out_file = Path(table_dir, 'observation.csv')
         self.main_df.transpose().to_csv(csv_out_file)
+
+        # if average_duplicates:            
+        #     csv_out_file = Path(table_dir, 'observation_error.csv')
+        #     self.main_df.transpose().to_csv(csv_out_file)
 
         print('Observation export complete.')
 

@@ -215,8 +215,8 @@ class SpectralParameters():
         if cfg.TIME_IT:
             tic = time.perf_counter()
             print('Computing '+scope+' spectral parameters...')
-        if scope in ('all', 'ratio'):
-            self.compute_ratio_permutations()
+        # if scope in ('all', 'ratio'): # seems to be a mistaken duplication - check this and put back if needed 20241119
+        #     self.compute_ratio_permutations()
         if scope in ('all', 'ratio'):
             self.compute_ratio_permutations()
         if scope in ('all', 'slope'):

@@ -22,6 +22,8 @@
 
 - [Table of Contents](#table-of-contents)
 - [About ](#about-)
+- [Updates ](#updates-)
+  - [V0 -\> V1 Changes to SPTK (currently hosted in cassis\_development branch).](#v0---v1-changes-to-sptk-currently-hosted-in-cassis_development-branch)
 - [Installing ](#installing-)
   - [Prerequisites](#prerequisites)
   - [Installing](#installing)
@@ -39,6 +41,55 @@
 * measuring the reconstruction error of the instrument on the spectral library,
 * evaluating the spectral parameters afforded by the instrument,
 * evaluating and ranking the ability of the spectral parmameters, and spectral parameter combinations, to separate categories of materials.
+
+## Updates <a name = "updates"></a>
+
+### V0 -> V1 Changes to SPTK (currently hosted in cassis_development branch).
+
+  **src/config.py**
+  - Change of default plot output from ```".png"``` to ```".pdf"```.
+  - New ```update_sample_res()``` function for changing the spectral sample resolution of the given instance of SPTK.
+
+  **src/instrument.py** 
+  - New ```shape``` option for generating ```"top-hat"``` profile transmission filters, as an alternative to ```"gauss"``` filters used previously.
+  - New ability to resample input high-resolution spectral transmission profile files to match the spectral sample resolution of the given instance of SPTK, via linear interpolation.
+  - New ability to estimate central-wavelength (CWL) and full-width-at-half-maximum (FWHM) from input high-resolution spectral transmission profiles.
+  - Addition of optional Signal-to-Noise Ratio (SNR) property to the Instrument object. Searches for SNR information when loading instrument transmission profiles.
+  - New method for estimating the standard-RGB colour of a given transmission filter, using the [```colour-science``` Python library](https://www.colour-science.org/).
+
+  **src/linear_discriminant_analysis.py**
+  - Minor change to handling of the ```singular_mask``` np.array to conform to pylint requirements, such that the inverse of the ```singular_mask``` matrix is calculated before passing to the ```bcsm``` (between-class scatter matrix), rather than during the passing.
+
+  **src/material_collection.py**
+  - ```plot_profiles``` function now returns a list of the matplotlib axes objects for the generated plots of the material collection.
+  - A new ```render_colour``` function takes an argument of a standard illuminant type, and calls the new ```SpectralLibraryAnalyser.render_colour()``` function, producing the expected standard-RGB appearance of each entry of the given MaterialCollection object.
+
+  **src/observation.py**
+  - Now inherits project name from the associated Instrument object, such that new projects can be constructed for unique MaterialCollection x Instrument combinations.
+  - New ```noisy`` attribute that tracks whether noise has been added to the given Observation object.
+  - New function for computing the uncertainty on the Observation object reflectance data, given the Signal-to-noise Ratio of the associated Instrument object.
+  - The ```add_noise``` function has been updated to replace the noise definition, that was previously defined as ```shot``` or ```thermal``, to now use the given SNR information, that can optionally be scaled by a given Spectral Power Distribution (SPD).
+  - Noise function to be refined.
+  - ```plot_profiles``` function now returns a list of the matplotlib axes objects for the generated plots of the material collection.
+  - A new ```render_colour``` function takes an argument of a standard illuminant type, and calls the new ```SpectralLibraryAnalyser.render_colour()``` function, producing the expected standard-RGB appearance of each entry of the given Observation object.
+
+  **src/spectral_library_analyser.py**
+  - The ```plot_profiles``` function now returns a list of the matplotlib Axes objects produced during the plotting process.
+  - Minor adjustments have been made to the ```render_plot_profile```, that now follows the Seaborn ```"paper"`` style.
+  - A new ```render_colour``` function has been written that uses the ```colour-science``` Python library to compute the expected colour of each entry of the given spectral library object (MaterialCollection or Observation), under the given illuminant. The colour presentation is underdevelopment.
+
+  **src/spectral_parameter_combination_classifier.py**
+  - Minor updates have been made to plot figure formatting.
+
+  **src/spectral_parameters.py**
+  - Ratio spectral parameters are now plotted on a log-10 scale, for better symmetry for presenting ratios of ±1.
+
+  **examples/material_collection_colour_example.ipynb**
+  - This new notebook demonstrates the Material Collection colour rendering function.
+
+  **examples/observation_colour_example.ipynb**
+  - This new notebook demonstrates the Observation colour rendering function.
+
 
 ## Installing <a name = "installing"></a>
 

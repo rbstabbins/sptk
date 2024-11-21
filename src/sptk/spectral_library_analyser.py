@@ -270,6 +270,10 @@ class SpectralLibraryAnalyser():
 
         return ax
 
+    # """
+    # Spectrogram Visualisation & Continuum Removal
+    # """
+
     def remove_continuum(self):
         """Remove the continuum from all spectra, and overwrite the local copy
         of the spectra object reflectance data.
@@ -438,10 +442,6 @@ class SpectralLibraryAnalyser():
         # export
         filepath=Path(self.project_dir,'spectrogram').with_suffix(cfg.PLT_FRMT)
         plt.savefig(filepath, bbox_inches='tight', pad_inches = 0.1)
-
-    # """
-    # Methods still in development
-    # """
 
     def analyse_bands(self):
         """Find the centre-wavelengths, fwhms, depths and areas of distinct
@@ -634,10 +634,79 @@ class SpectralLibraryAnalyser():
         gauss = np.sum(gauss, axis=1)
         # sum over the correct axis to get final profile
         return gauss
+    
+    # """
+    # Colour Processing & Rendering
+    # """
+
+    def compute_colour(self,
+                illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D50'
+                       ) -> pd.DataFrame:
+        """Compute the colour of each entry in the Material Collection or 
+        Observation according to the given illuminant.
+
+        :param illuminant: illuminant to use to compute colour, defaults to 'D50'
+        :type illuminant: str, optional
+        :return: Table of colours for each entry
+        :rtype: pd.DataFrame
+        """
+        # deep copy the spectra object
+        mat_colour = copy.deepcopy(self.spectra_obj)
+        
+        # get the relfectance data from the original spectra object
+        refl_df = self.spectra_obj.get_refl_df()
+        
+        # prepare the copied spectra object for colour rather than reflectance
+        mat_colour.main_df.drop(self.wvls, axis=1, inplace=True)
+        mat_colour.main_df.rename(columns={"Reflectance": "Colour"}, inplace=True)
+        # add illuminant metadata
+        mat_colour.main_df['Illuminant'] = illuminant
+        
+        # compute XYZ and append to new colour df
+        
+        # convert the reflectance data to colour-science spectral ditributions
+        sds = colour.MultiSpectralDistributions(refl_df.T)
+        # get the illuminant
+        illum = colour.SDS_ILLUMINANTS[illuminant]
+        
+        # convert the spectral distributions to XYZ space
+        # if material collection use ASTM E308, if observation use Integration
+        if self.obj_type == 'observation':
+            method = 'Integration'
+        else:
+            method = 'ASTM E308'
+        # add the illuminant to the new colour df as new row
+        xyz_illum = colour.sd_to_XYZ(illum, illuminant=illum, k=1/100, method=method)
+        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1/100, method=method) # convert to XYZ space
+
+        # append the XYZ values to the new colour df
+        mat_colour.main_df['X'] = xyz[:,0]
+        mat_colour.main_df['Y'] = xyz[:,1]
+        mat_colour.main_df['Z'] = xyz[:,2]
+
+        # convert the XYZ values to sRGB        
+        illum_ccs = colour.CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer'][illuminant]
+        rgb = colour.XYZ_to_sRGB(xyz, illum_ccs)
+        rgb = np.clip(rgb, 0, 1) * 255
+
+        mat_colour.main_df['R'] = rgb[:,0]
+        mat_colour.main_df['G'] = rgb[:,1]
+        mat_colour.main_df['B'] = rgb[:,2]
+
+        # convert to chromaticity coordinates
+        xyY = colour.XYZ_to_xyY(xyz)
+
+        mat_colour.main_df['x'] = xyY[:,0]
+        mat_colour.main_df['y'] = xyY[:,1]
+        mat_colour.main_df['Y*'] = xyY[:,2]
+
+        return mat_colour
+
 
     def render_colour(self,
+            colour_spectra_obj: object,
             illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D50'
-                      ) -> Tuple[pd.DataFrame, plt.figure]:
+                      ) -> plt.figure:
         """Render the colour of each spectrum in the spectral library according
         to the given illuminant.
 
@@ -646,46 +715,76 @@ class SpectralLibraryAnalyser():
         :return: Table of colours for each spectrum, and figure of colours
         :rtype: pd.DataFrame, plt.figure
         """        
-        # load the spectral library
-        refl_df = self.spectra_obj.get_refl_df()
+        # load the spectral library        
+        index = colour_spectra_obj.main_df.index
 
-        # convert the reflectance data to colour-science spectral ditributions
-        sds = colour.MultiSpectralDistributions(refl_df.T)
-        
-        # get the illuminant
-        illum = colour.SDS_ILLUMINANTS[illuminant] # use a D50 standard illuminant
+        rgb = colour_spectra_obj.main_df[['R', 'G', 'B']].to_numpy() / 255
+        XYZ = colour_spectra_obj.main_df[['X', 'Y', 'Z']].to_numpy()
+        xyY = colour_spectra_obj.main_df[['x', 'y', 'Y*']].to_numpy()
 
-        # convert the spectral distributions to XYZ space
-        # if material collection use ASTM E308, if observation use Integration
-        if self.obj_type == 'observation':
-            method = 'Integration'
-        else:
-            method = 'ASTM E308'
-        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1/100, method=method) # convert to XYZ space
+        colours = sns.color_palette(rgb)
+        sns.palplot(colours)
 
-        # convert the XYZ values to sRGB        
-        rgb = colour.XYZ_to_sRGB(xyz)
+        min_names = colour_spectra_obj.main_df['Mineral Name'][index]
+        cats = colour_spectra_obj.main_df['Category'][index]
 
-        rgb = np.clip(rgb, 0, 1)
-        print(rgb)
-        cwl_colours = sns.color_palette(rgb)
-        sns.palplot(cwl_colours)
-
-        srgb_df = pd.DataFrame(rgb, index=refl_df.index)
+        srgb_df = pd.DataFrame(rgb, index=index)
         sRGBs = []
-        min_list = refl_df.index.to_list()
-        for min in min_list:            
-            RGB = colour.plotting.ColourSwatch(srgb_df.loc[min], name=min)
-            sRGBs.append(RGB)    
-        colour.plotting.plot_multi_colour_swatches(sRGBs, width=1, height=1, columns=len(min_list) //np.sqrt(len(min_list)), text_kwargs={'size': 6})
-        
-        # # Plotting the post-2014 MacBeth ColorChecker for reference
-        # cc14_sds = colour.SDS_COLOURCHECKERS['babel_average']
-        # cc14_XYZ = colour.sd_to_XYZ(cc14_sds, illuminant)
-        # cc14_RGB = colour.XYZ_to_sRGB(cc14_XYZ / 100)
-        # for min in min_list:            
-        #     RGB = colour.plotting.ColourSwatch(srgb_df.loc[min], name=min)
-        #     sRGBs.append(RGB)    
-        # colour.plotting.plot_multi_colour_swatches(sRGBs, width=1, height=1, columns=len(min_list) //np.sqrt(len(min_list)), text_kwargs={'size': 6})
+        min_list = index.to_list()
+        for min in min_list:          
+            # name swatch by Category, Mineral Name, Sample ID
+            swatch_name = f"{cats.loc[min]}\n{min_names.loc[min]}\n{min}"  
+            sRGB = colour.plotting.ColourSwatch(srgb_df.loc[min], name=swatch_name)
+            sRGBs.append(sRGB) 
 
-        return None, None
+        fig, ax = colour.plotting.plot_multi_colour_swatches(
+            sRGBs, 
+            width=1, height=1, columns=len(min_list) //np.sqrt(len(min_list)), 
+            text_kwargs={'size': 6})
+        
+        # plotting in chromaticity space
+        fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
+            show=False, 
+            show_spectral_locus=True,
+            show_diagram_colours=True,
+            transparent_background=True)
+        
+        # cat to integer
+        cat_codes = cats.astype('category').cat.codes
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+
+        for i, min in enumerate(min_list):
+           
+            sym = syms_list[cat_codes.loc[min]]
+            swatch_name = f"{min}" #f"{cats.loc[min]}\n{min_names.loc[min]}\n{min}"  
+                        
+            xy = xyY[i, 0:2]
+            x, y = xy
+            ax.plot(x, y, f"{sym}", color=list(rgb[i]), label=swatch_name, markeredgecolor='white', markersize=6)
+
+            # # Annotating the plot. - this is too messy when there are many samples - disable for now.           
+            # ax.annotate(
+            #     swatch_name,
+            #     xy=xy,
+            #     xytext=(-50, 30),
+            #     textcoords="offset points",
+            #     arrowprops=dict(arrowstyle="->", connectionstyle=f"arc3, rad=-0.2"),
+            # )      
+        
+        # plot the sRGB space in the chromaticity diagram
+        sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
+        ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='black', marker='', label='sRGB')
+        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='black', marker='')
+    
+        fig, ax = colour.plotting.render(
+            show=True,
+            title=f'sRGB {illuminant} Chromaticity Plot',
+            # figure_size=(10, 10),
+            limits=(-0.1, 0.9, -0.1, 0.9),
+            x_tighten=True,
+            y_tighten=True,
+            legend=True,
+            transparent_background=True
+        ) 
+
+        return None

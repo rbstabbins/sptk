@@ -739,5 +739,6 @@ class MaterialCollection():
         illuminant.
         """
         plotter = SpectralLibraryAnalyser(self)
-        colour_df, fig = plotter.render_colour(illuminant)
-        return colour_df, fig
+        colour_spectra_obj = plotter.compute_colour(illuminant)
+        fig = plotter.render_colour(colour_spectra_obj, illuminant)
+        return colour_spectra_obj, fig

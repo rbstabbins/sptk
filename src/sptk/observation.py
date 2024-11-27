@@ -922,5 +922,21 @@ class Observation():
         illuminant.
         """
         plotter = SpectralLibraryAnalyser(self)
-        colour_df, fig = plotter.render_colour(illuminant)
-        return colour_df, fig
+        colour_spectra_obj = plotter.compute_colour(illuminant)
+        fig = plotter.render_colour(colour_spectra_obj)
+        return colour_spectra_obj, fig
+    
+    def render_false_colour(self,
+            filter_ids: Tuple[str, str, str]) -> Tuple[pd.DataFrame, plt.figure]:
+        """Render the false colour image of the Observation for the given 
+        instrument filters.
+        
+        :param filter_ids: tuple of filter ids to render the false colour image
+        :type filter_ids: Tuple[str, str, str]
+        :return: Observation duplicate of false colours for each entry and figure
+        :rtype: Tuple[pd.DataFrame, plt.figure]
+        """
+        plotter = SpectralLibraryAnalyser(self)
+        false_colour_obs = plotter.compute_false_colour(filter_ids)
+        fig = plotter.render_colour(false_colour_obs)
+        return false_colour_obs, fig

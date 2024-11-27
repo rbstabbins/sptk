@@ -18,6 +18,7 @@ import colour
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import seaborn as sns
@@ -641,7 +642,7 @@ class SpectralLibraryAnalyser():
 
     def compute_colour(self,
                 illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D50'
-                       ) -> pd.DataFrame:
+                       ) -> object:
         """Compute the colour of each entry in the Material Collection or 
         Observation according to the given illuminant.
 
@@ -651,16 +652,16 @@ class SpectralLibraryAnalyser():
         :rtype: pd.DataFrame
         """
         # deep copy the spectra object
-        mat_colour = copy.deepcopy(self.spectra_obj)
+        col_obj = copy.deepcopy(self.spectra_obj)
         
         # get the relfectance data from the original spectra object
         refl_df = self.spectra_obj.get_refl_df()
         
         # prepare the copied spectra object for colour rather than reflectance
-        mat_colour.main_df.drop(self.wvls, axis=1, inplace=True)
-        mat_colour.main_df.rename(columns={"Reflectance": "Colour"}, inplace=True)
+        col_obj.main_df.drop(self.wvls, axis=1, inplace=True)
+        col_obj.main_df.rename(columns={"Reflectance": "Colour"}, inplace=True)
         # add illuminant metadata
-        mat_colour.main_df['Illuminant'] = illuminant
+        col_obj.main_df['Illuminant'] = illuminant
         
         # compute XYZ and append to new colour df
         
@@ -675,38 +676,87 @@ class SpectralLibraryAnalyser():
             method = 'Integration'
         else:
             method = 'ASTM E308'
-        # add the illuminant to the new colour df as new row
-        xyz_illum = colour.sd_to_XYZ(illum, illuminant=illum, k=1/100, method=method)
-        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1/100, method=method) # convert to XYZ space
+
+        # # add the illuminant to the new colour df as new row
+        # xyz_illum = colour.sd_to_XYZ(illum, 
+        #                       illuminant=illum, k=1/100, method=method)
+        
+        # convert to XYZ space
+        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1/100, method=method)
 
         # append the XYZ values to the new colour df
-        mat_colour.main_df['X'] = xyz[:,0]
-        mat_colour.main_df['Y'] = xyz[:,1]
-        mat_colour.main_df['Z'] = xyz[:,2]
+        col_obj.main_df['X'] = xyz[:,0]
+        col_obj.main_df['Y'] = xyz[:,1]
+        col_obj.main_df['Z'] = xyz[:,2]
 
         # convert the XYZ values to sRGB        
         illum_ccs = colour.CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer'][illuminant]
         rgb = colour.XYZ_to_sRGB(xyz, illum_ccs)
         rgb = np.clip(rgb, 0, 1) * 255
 
-        mat_colour.main_df['R'] = rgb[:,0]
-        mat_colour.main_df['G'] = rgb[:,1]
-        mat_colour.main_df['B'] = rgb[:,2]
+        col_obj.main_df['R'] = rgb[:,0]
+        col_obj.main_df['G'] = rgb[:,1]
+        col_obj.main_df['B'] = rgb[:,2]
 
         # convert to chromaticity coordinates
         xyY = colour.XYZ_to_xyY(xyz)
 
-        mat_colour.main_df['x'] = xyY[:,0]
-        mat_colour.main_df['y'] = xyY[:,1]
-        mat_colour.main_df['Y*'] = xyY[:,2]
+        col_obj.main_df['x'] = xyY[:,0]
+        col_obj.main_df['y'] = xyY[:,1]
+        col_obj.main_df['Y*'] = xyY[:,2]
 
-        return mat_colour
+        return col_obj
 
+    def compute_false_colour(self,
+            filter_ids: Tuple[str, str, str]) -> object:
+        """Compute the false colour of each entry in the given Observation for
+        the given instrument filter IDs.
 
+        :param filter_ids: Filter IDs for the instrument
+        :type filter_ids: Tuple[str, str, str]
+        :return: Observation duplicate of false colours for each entry
+        :rtype: Observation
+        """
+        # deep copy the spectra object
+        false_col_obj = copy.deepcopy(self.spectra_obj)
+
+        # get the reflectance data for the given filter IDs
+        # get the cwls for the filters
+        inst_info = self.spectra_obj.instrument.get_metrics()
+        cwls = inst_info.loc[filter_ids].cwl.to_list()
+        refl_df = self.spectra_obj.get_refl_df()
+        rgb = refl_df[cwls].to_numpy()
+        rgb = np.clip(rgb, 0, 1) * 255
+
+        # set the RGB values for the false colours
+        false_col_obj.main_df.drop(self.wvls, axis=1, inplace=True)
+        false_col_obj.main_df.rename(columns={"Reflectance": "Colour"}, inplace=True)
+        false_col_obj.main_df['R'] = rgb[:,0]
+        false_col_obj.main_df['G'] = rgb[:,1]
+        false_col_obj.main_df['B'] = rgb[:,2]
+        
+        # convert RGB to XYZ and add to object
+        XYZ = colour.RGB_to_XYZ(rgb, 'sRGB')
+
+        # append the XYZ values to the new colour df
+        false_col_obj.main_df['X'] = XYZ[:,0]
+        false_col_obj.main_df['Y'] = XYZ[:,1]
+        false_col_obj.main_df['Z'] = XYZ[:,2]
+
+        # convet XYZ to xyY and add to object
+        xyY = colour.XYZ_to_xyY(XYZ)
+
+        false_col_obj.main_df['x'] = xyY[:,0]
+        false_col_obj.main_df['y'] = xyY[:,1]
+        false_col_obj.main_df['Y*'] = xyY[:,2]
+
+        # add colour space information
+        false_col_obj.main_df['Filter-Space'] = str.join('-', filter_ids)
+
+        return false_col_obj
+        
     def render_colour(self,
-            colour_spectra_obj: object,
-            illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D50'
-                      ) -> plt.figure:
+            colour_obj: object) -> plt.figure:
         """Render the colour of each spectrum in the spectral library according
         to the given illuminant.
 
@@ -716,75 +766,102 @@ class SpectralLibraryAnalyser():
         :rtype: pd.DataFrame, plt.figure
         """        
         # load the spectral library        
-        index = colour_spectra_obj.main_df.index
+        index = colour_obj.main_df.index
 
-        rgb = colour_spectra_obj.main_df[['R', 'G', 'B']].to_numpy() / 255
-        XYZ = colour_spectra_obj.main_df[['X', 'Y', 'Z']].to_numpy()
-        xyY = colour_spectra_obj.main_df[['x', 'y', 'Y*']].to_numpy()
+        rgb = colour_obj.main_df[['R', 'G', 'B']].to_numpy() / 255
+        XYZ = colour_obj.main_df[['X', 'Y', 'Z']].to_numpy()
+        xyY = colour_obj.main_df[['x', 'y', 'Y*']].to_numpy()
 
-        colours = sns.color_palette(rgb)
-        sns.palplot(colours)
+        min_names = colour_obj.main_df['Mineral Name'][index]
+        cats = colour_obj.main_df['Category'][index]
 
-        min_names = colour_spectra_obj.main_df['Mineral Name'][index]
-        cats = colour_spectra_obj.main_df['Category'][index]
+        if 'Filter-Space' in colour_obj.main_df.columns:
+            title_sfx = f"{colour_obj.main_df['Filter-Space'][index].iloc[0]}"
+        elif 'Illuminant' in colour_obj.main_df.columns:
+            title_sfx = f"{colour_obj.main_df['Illuminant'][index].iloc[0]}"
 
-        srgb_df = pd.DataFrame(rgb, index=index)
-        sRGBs = []
-        min_list = index.to_list()
-        for min in min_list:          
-            # name swatch by Category, Mineral Name, Sample ID
-            swatch_name = f"{cats.loc[min]}\n{min_names.loc[min]}\n{min}"  
-            sRGB = colour.plotting.ColourSwatch(srgb_df.loc[min], name=swatch_name)
-            sRGBs.append(sRGB) 
+        # make a separate pallete plot for each category
+        uniq_cats = cats.unique()
+        for cat in uniq_cats:
+            # get the index of the samples in this category
+            cat_index = cats[cats == cat].index
+            cat_rgb = colour_obj.main_df[['R', 'G', 'B']]
+            cat_rgb = cat_rgb.loc[cat_index].to_numpy() / 255
+            min_list = cat_index.to_list()
+            swatch_names = []
+            for min in min_list:          
+                # name swatch by Mineral Name, Sample ID
+                swatch_name = f"{min_names.loc[min]}\n{min}"  
+                swatch_names.append(swatch_name)
 
-        fig, ax = colour.plotting.plot_multi_colour_swatches(
-            sRGBs, 
-            width=1, height=1, columns=len(min_list) //np.sqrt(len(min_list)), 
-            text_kwargs={'size': 6})
-        
+            # # Pallete plot list of colours
+            pal = sns.color_palette(cat_rgb)
+            # sns.palplot(pal)
+            n = len(pal)
+            fig, ax = plt.subplots(1, 1, figsize=(0.5, n*0.5))
+            ax.imshow(np.arange(n).reshape(n, 1),
+                    cmap=mpl.colors.ListedColormap(list(pal)),
+                    interpolation="nearest", aspect="auto")
+            ax.yaxis.tick_right()
+            ax.set_xticks([-.5, .5])
+            ax.set_yticks(np.arange(n))
+            ax.tick_params(axis='y', which='both', length=0)
+            # Ensure nice border between colors
+            ax.set_yticklabels(swatch_names)
+            # # The proper way to set no ticks
+            ax.xaxis.set_major_locator(ticker.NullLocator())                
+            ax.set_title(cat +': '+title_sfx, loc='left')
+
         # plotting in chromaticity space
         fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
             show=False, 
             show_spectral_locus=True,
             show_diagram_colours=True,
-            transparent_background=True)
+            transparent_background=False,            
+            )
         
         # cat to integer
         cat_codes = cats.astype('category').cat.codes
-        syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 
+                     'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
 
+        min_list = index.to_list()
         for i, min in enumerate(min_list):
            
             sym = syms_list[cat_codes.loc[min]]
-            swatch_name = f"{min}" #f"{cats.loc[min]}\n{min_names.loc[min]}\n{min}"  
+            swatch_name = f"{min}"
                         
             xy = xyY[i, 0:2]
             x, y = xy
-            ax.plot(x, y, f"{sym}", color=list(rgb[i]), label=swatch_name, markeredgecolor='white', markersize=6)
-
-            # # Annotating the plot. - this is too messy when there are many samples - disable for now.           
-            # ax.annotate(
-            #     swatch_name,
-            #     xy=xy,
-            #     xytext=(-50, 30),
-            #     textcoords="offset points",
-            #     arrowprops=dict(arrowstyle="->", connectionstyle=f"arc3, rad=-0.2"),
-            # )      
+            ax.plot(x, y, 
+                    f"{sym}", color=list(rgb[i]), 
+                    label=swatch_name, 
+                    markeredgecolor='white', markersize=6)
         
         # plot the sRGB space in the chromaticity diagram
         sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
-        ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='black', marker='', label='sRGB')
-        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='black', marker='')
-    
-        fig, ax = colour.plotting.render(
-            show=True,
-            title=f'sRGB {illuminant} Chromaticity Plot',
-            # figure_size=(10, 10),
-            limits=(-0.1, 0.9, -0.1, 0.9),
-            x_tighten=True,
-            y_tighten=True,
-            legend=True,
-            transparent_background=True
-        ) 
+        ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB')
+        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='')  
+        
+        # insert category labels into the legend        
+        handles, labels = ax.get_legend_handles_labels()        
+        for cat in uniq_cats:
+            cat_index = cats[cats == cat].index
+            cat_index = labels.index(cat_index[0])
+            labels.insert(cat_index, cat)
+            handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
+                                color='w', marker='o', markersize=0, label=cat))
+        
+        fig.suptitle(f'{title_sfx}', fontsize='large')
 
-        return None
+        ax.legend(handles, labels, loc='upper right', 
+                  ncols=len(uniq_cats), fontsize='x-small')
+        
+        # set figure size
+        fig.set_size_inches(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1])   
+        # set DPI
+        fig.set_dpi(cfg.DPI)
+
+        fig.tight_layout()  
+        
+        return fig

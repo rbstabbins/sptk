@@ -326,17 +326,17 @@ RELAB_TECTOSILICATES = {'tectosilicate': [
         ('zeolite barrerite', '*')
     ]}
 
-RELAB_ALL_GROUPS = [
-        RELAB_CARBONATES,
-        RELAB_CYCLOSILICATES,
-        RELAB_HALIDES,
-        RELAB_HYDROXIDES,
-        RELAB_INOSILICATES,
-        RELAB_NESOSILICATES,
-        RELAB_OXIDES,
-        RELAB_PHOSPHATES,
-        RELAB_PHYLLOSILICATES,
-        RELAB_SOROSILICATES,
-        RELAB_SULFIDES,
-        RELAB_SULFATES,
-        RELAB_TECTOSILICATES]
+RELAB_ALL_GROUPS = {
+        'carbonate': RELAB_CARBONATES['carbonate'],
+        'cyclosilicate': RELAB_CYCLOSILICATES['cyclosilicate'],
+        'halide': RELAB_HALIDES['halide'],
+        'hydroxide': RELAB_HYDROXIDES['hydroxide'],
+        'inosilicate': RELAB_INOSILICATES['inosilicate'],
+        'nesosilicate': RELAB_NESOSILICATES['nesosilicate'],
+        'oxide': RELAB_OXIDES['oxide'],
+        'phosphate': RELAB_PHOSPHATES['phosphate'],
+        'phyllosilicate': RELAB_PHYLLOSILICATES['phyllosilicate'],
+        'sorosilicate': RELAB_SOROSILICATES['sorosilicate'],
+        'sulfide': RELAB_SULFIDES['sulfide'],
+        'sulfate': RELAB_SULFATES['sulfate'],
+        'tectosilicate': RELAB_TECTOSILICATES['tectosilicate']}

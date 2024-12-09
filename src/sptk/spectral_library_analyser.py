@@ -705,6 +705,9 @@ class SpectralLibraryAnalyser():
         col_obj.main_df['y'] = xyY[:,1]
         col_obj.main_df['Y*'] = xyY[:,2]
 
+        # add colour space information
+        col_obj.main_df['Colour-Space'] = 'sRGB'
+
         return col_obj
 
     def compute_false_colour(self,
@@ -751,17 +754,17 @@ class SpectralLibraryAnalyser():
         false_col_obj.main_df['Y*'] = xyY[:,2]
 
         # add colour space information
-        false_col_obj.main_df['Filter-Space'] = str.join('-', filter_ids)
+        false_col_obj.main_df['Colour-Space'] = str.join('-', filter_ids)
 
         return false_col_obj
         
     def render_colour(self,
             colour_obj: object) -> plt.figure:
         """Render the colour of each spectrum in the spectral library according
-        to the given illuminant.
+        to the given computed colour coordinates.
 
-        :param illuminant: illuminant to use to compute colour, defaults to 'D50'
-        :type illuminant: str, optional
+        :param colour_obj: Colour object with tables of RGB, XYZ and xyY values
+        :type colour_obj: object, MaterialCollection or Observation
         :return: Table of colours for each spectrum, and figure of colours
         :rtype: pd.DataFrame, plt.figure
         """        
@@ -775,14 +778,15 @@ class SpectralLibraryAnalyser():
         min_names = colour_obj.main_df['Mineral Name'][index]
         cats = colour_obj.main_df['Category'][index]
 
-        if 'Filter-Space' in colour_obj.main_df.columns:
-            title_sfx = f"{colour_obj.main_df['Filter-Space'][index].iloc[0]}"
-        elif 'Illuminant' in colour_obj.main_df.columns:
-            title_sfx = f"{colour_obj.main_df['Illuminant'][index].iloc[0]}"
+        if 'Colour-Space' in colour_obj.main_df.columns:
+            title_sfx = f"{colour_obj.main_df['Colour-Space'][index].iloc[0]}"
+        # elif 'Illuminant' in colour_obj.main_df.columns:
+        #     title_sfx = f"{colour_obj.main_df['Illuminant'][index].iloc[0]}"
 
-        # make a separate pallete plot for each category
+        # make a separate  plot for each category
         uniq_cats = cats.unique()
         for cat in uniq_cats:
+
             # get the index of the samples in this category
             cat_index = cats[cats == cat].index
             cat_rgb = colour_obj.main_df[['R', 'G', 'B']]
@@ -794,23 +798,51 @@ class SpectralLibraryAnalyser():
                 swatch_name = f"{min_names.loc[min]}\n{min}"  
                 swatch_names.append(swatch_name)
 
-            # # Pallete plot list of colours
+            # Pallete plot list of colours for this category
             pal = sns.color_palette(cat_rgb)
-            # sns.palplot(pal)
             n = len(pal)
-            fig, ax = plt.subplots(1, 1, figsize=(0.5, n*0.5))
-            ax.imshow(np.arange(n).reshape(n, 1),
-                    cmap=mpl.colors.ListedColormap(list(pal)),
-                    interpolation="nearest", aspect="auto")
-            ax.yaxis.tick_right()
-            ax.set_xticks([-.5, .5])
-            ax.set_yticks(np.arange(n))
-            ax.tick_params(axis='y', which='both', length=0)
-            # Ensure nice border between colors
-            ax.set_yticklabels(swatch_names)
-            # # The proper way to set no ticks
-            ax.xaxis.set_major_locator(ticker.NullLocator())                
-            ax.set_title(cat +': '+title_sfx, loc='left')
+
+            # make the figure, according to number of samples
+            max_vertical_inches = 10
+            n_cols = int(np.ceil(n*0.5 / max_vertical_inches))
+            n_rows = int(np.ceil(n / n_cols))
+
+            # if n_cols > 4:
+            #     n_sheets = int(np.ceil(n_cols / 4))
+            #     n_cols = 4
+            # else:
+            #     n_sheets = 1
+
+            # for sheet in np.arange(n_sheets):
+            
+            fig, axes = plt.subplots(1, n_cols, figsize=(2.5*n_cols, n_rows*0.5))
+
+            if not isinstance(axes, np.ndarray):
+                axes = [axes]
+            
+            for i in np.arange(n_cols):
+
+                ax = axes[i]
+                if i != n_cols-1:
+                    ax_pal = pal[n_rows*i:n_rows*(i+1)]
+                    ax_swatch_names = swatch_names[n_rows*i:n_rows*(i+1)]
+                else:
+                    ax_pal = pal[n_rows*i:]
+                    ax_swatch_names = swatch_names[n_rows*i:]
+                    n_rows = len(ax_pal)   
+
+                ax.imshow(np.arange(n_rows).reshape(n_rows, 1),
+                        cmap=mpl.colors.ListedColormap(list(ax_pal)),
+                        interpolation="nearest", aspect='equal')
+
+                ax.yaxis.tick_right()
+                ax.set_xticks([-.5, .5])
+                ax.set_yticks(np.arange(n_rows))
+                ax.tick_params(axis='y', which='both', length=0)            
+                ax.set_yticklabels(ax_swatch_names, fontsize=8)
+                ax.xaxis.set_major_locator(ticker.NullLocator())                
+            fig.suptitle(cat +': '+title_sfx, fontsize=12)
+            fig.tight_layout()
 
         # plotting in chromaticity space
         fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
@@ -836,27 +868,37 @@ class SpectralLibraryAnalyser():
             ax.plot(x, y, 
                     f"{sym}", color=list(rgb[i]), 
                     label=swatch_name, 
-                    markeredgecolor='white', markersize=6)
+                    markeredgecolor='white', markersize=4)
         
         # plot the sRGB space in the chromaticity diagram
         sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
         ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB')
-        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='')  
+        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='') 
+
+        # if number of entries is >20, just add legend for categories, as a white symbol
+        handles, labels = ax.get_legend_handles_labels()
+
+        if len(labels) > 20:
+            labels = uniq_cats
+            # set the handle to the category symbol
+            handles = [mpl.lines.Line2D([0], [0], 
+                                color='w', markeredgecolor='k', 
+                                marker=syms_list[i], markersize=6, 
+                                label=cat) for i, cat in enumerate(uniq_cats)]
+
+        else:
+            # insert category labels into the legend        
+            for cat in uniq_cats:
+                cat_index = cats[cats == cat].index
+                cat_index = labels.index(cat_index[0])
+                labels.insert(cat_index, cat)
+                handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
+                                    color='w', marker='o', markersize=6, label=cat))
         
-        # insert category labels into the legend        
-        handles, labels = ax.get_legend_handles_labels()        
-        for cat in uniq_cats:
-            cat_index = cats[cats == cat].index
-            cat_index = labels.index(cat_index[0])
-            labels.insert(cat_index, cat)
-            handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
-                                color='w', marker='o', markersize=0, label=cat))
+        ax.legend(handles, labels, loc='upper right', fontsize='x-small')
         
         fig.suptitle(f'{title_sfx}', fontsize='large')
 
-        ax.legend(handles, labels, loc='upper right', 
-                  ncols=len(uniq_cats), fontsize='x-small')
-        
         # set figure size
         fig.set_size_inches(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1])   
         # set DPI

@@ -207,7 +207,7 @@ class MaterialCollection():
                 #             for entry_file in entry_files], [])
                 # expand the filenames into list, but relative to the package
                 for entry_file in entry_files:
-                    file_list = glob.glob(str(cfg.resolve_path(entry_file, root='data')))
+                    file_list = glob.glob(str(cfg.resolve_path(entry_file, root='data')))                    
                     file_list = [os.path.relpath(file, cfg.DATA_DIRECTORY) for file in file_list]
                     cat_entries = cat_entries + file_list
 
@@ -249,7 +249,7 @@ class MaterialCollection():
                                     new_entry.columns] = new_entry.values
         # put the Data ID as the index
         main_df.set_index('Data ID', inplace=True)
-        print('Loading of entries complete.')
+        print(f'Loading {len(main_df.index)} of entries complete.')
         return main_df
 
     @staticmethod
@@ -740,5 +740,5 @@ class MaterialCollection():
         """
         plotter = SpectralLibraryAnalyser(self)
         colour_spectra_obj = plotter.compute_colour(illuminant)
-        fig = plotter.render_colour(colour_spectra_obj, illuminant)
+        fig = plotter.render_colour(colour_spectra_obj)
         return colour_spectra_obj, fig

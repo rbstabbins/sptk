@@ -15,6 +15,38 @@ Date: 31-08-2022
 TEST_SET = {'test_target': [('test_target', '*')],
             'test_background': [('test_background', '*')]}
 
+# MacBeth ColorChecker Set
+COLORCHECKER_SET = {
+    'natural': [('ColorChecker', 
+                 ['dark_skin',
+                  'light_skin',
+                  'blue_sky',
+                  'foliage',
+                  'blue_flower',
+                  'bluish_green'])],
+    'colour': [('ColorChecker', 
+                 ['orange',
+                  'purplish_blue',
+                  'moderate_red',
+                  'purple',
+                  'yellow_green',
+                  'orange_yellow'])],
+    'primary': [('ColorChecker', 
+                 ['blue',
+                  'green',
+                  'red',
+                  'yellow',
+                  'magenta',
+                  'cyan'])],
+    'grayscale': [('ColorChecker', 
+                 ['black',
+                  'neutral_3.5',
+                  'neutral_5',
+                  'neutral_6.5',
+                  'neutral_8',
+                  'white'])]
+    }
+
 # hematite at oxia planum
 OXIA_PLANUM_SET = {
     'hematite': [

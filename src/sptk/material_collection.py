@@ -183,7 +183,15 @@ class MaterialCollection():
         entry_dict = {}
         for cat in material_dict.keys():
             # for each category make new dict entry
-            cat_path = data_library
+            
+            # if the category label is in the list of directories of the given 
+            # spectral library, then set the cat_path to 
+            # [spectral_library]/[category]
+            # this allows for loading of the larger RELAB structure
+            if cat in os.listdir(data_library):
+                cat_path = data_library / cat
+            else:
+                cat_path = data_library
 
             entries = material_dict[cat]
             entry_is_singular = isinstance(entries, tuple)

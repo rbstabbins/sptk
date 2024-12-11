@@ -908,11 +908,11 @@ class Observation():
 
         print('Observation export complete.')
 
-    def plot_profiles(self, categories_only: bool=False, ci: bool=False) -> List[plt.Axes]:
+    def plot_profiles(self, categories_only: bool=False, ci: bool=False, hires_under: bool=False) -> List[plt.Axes]:
         """Plot the profiles of the materials as sampled by the instrument
         """
         plotter = SpectralLibraryAnalyser(self)
-        axes = plotter.plot_profiles(categories_only=categories_only, ci=ci)
+        axes = plotter.plot_profiles(categories_only=categories_only, ci=ci, hires_under=hires_under)
         return axes
     
     def render_colour(self, 

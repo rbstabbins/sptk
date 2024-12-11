@@ -82,7 +82,9 @@ class SpectralLibraryAnalyser():
             with_noise: bool=False,
             scope: str='all',
             categories_only: bool=False,
-            ci: bool=False) -> plt.Axes:
+            ci: bool=False,
+            hires_under: bool=False
+            ) -> plt.Axes:
         """Plot the profiles of the materials of the spectral library
         """
         if cfg.TIME_IT:
@@ -122,7 +124,8 @@ class SpectralLibraryAnalyser():
                             mnrl=mnrl,
                             scope=scope,
                             with_noise=with_noise,
-                            ci=ci)
+                            ci=ci,
+                            hires_under=hires_under)
                 axes.append(ax)
 
         if cfg.TIME_IT:
@@ -137,7 +140,8 @@ class SpectralLibraryAnalyser():
             mnrl: str='entries',
             ci: bool=False,
             scope: str='all',
-            with_noise: bool=False) -> None:
+            with_noise: bool=False,
+            hires_under: bool=False) -> None:
         """Method for producing the plot itself, according to given DataFrame,
         class, mineral name, and scope.
 
@@ -153,6 +157,9 @@ class SpectralLibraryAnalyser():
         :type scope: str, optional
         :param with_noise: Indicates if noise has been added, defaults to False
         :type with_noise: bool, optional
+        :param hires_under: for Observation under-plot the laboratory spectra, 
+                            defaults to False
+        :type hires_under: bool, optional
         """
 
         data_df = data_df.reset_index()
@@ -169,7 +176,13 @@ class SpectralLibraryAnalyser():
 
         sns.set_context("paper")
 
-        fig_size = (cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+        if cat != 'all':
+            n_ids = len(data_df['Data ID'].unique())
+            n_cols = -(-n_ids // 15)
+        else:
+            n_cols = 1            
+        width_factor = 1 + 0.3 * n_cols
+        fig_size = (width_factor*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
         fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI)
         # y_max = max([1.0, data_df.value.max()])
 
@@ -216,33 +229,56 @@ class SpectralLibraryAnalyser():
         ax.grid(True, which='major',axis='both', lw=0.6)
         ax.grid(True, which='minor',axis='both', lw=0.3)
 
-        ax.legend(loc="upper left", fontsize='x-small')
+        ax.legend(loc="center left", 
+                  fontsize=cfg.LEGEND_S, 
+                  bbox_to_anchor=(1.02, 0.5),
+                  ncol=n_cols
+                  )
 
         # plot title
         project_str = self.spectra_obj.project_name.replace('_', ' ')
         if self.obj_type == 'observation':
             leg_title = f'Class: {cat}, Group: {mnrl} ({scope} data) - sampled'
             if ci:
-                title = f'Mean ± 1σ {self.spectra_obj.instrument.name} Sampled Spectral Library'
+                title = f'{self.spectra_obj.instrument.name} {cat} {mnrl} Mean ± 1σ'
             else:                
-                title = f'{self.spectra_obj.instrument.name} Sampled Spectral Library'
+                title = f'{self.spectra_obj.instrument.name} {cat} {mnrl}'
+            if hires_under:
+                refl_df = self.spectra_obj.material_collection.get_refl_df(category=cat,
+                                                            mineral_name=mnrl)
+                hires_df = refl_df.reset_index()
+                # long form version of plotting, to aggregate data
+                hires_df =pd.melt(hires_df, id_vars=['Data ID'])
+                sns.lineplot(
+                    data=hires_df,
+                    x='variable',
+                    y='value',
+                    hue=hue_flag,
+                    style=hue_flag,
+                    markeredgewidth=0.0,
+                    alpha=0.3,
+                    units='Data ID',
+                    estimator=None,
+                    lw=0.5,
+                    legend=False,
+                    ax=ax)
         else:
             leg_title = f'Class: {cat}, Group: {mnrl} ({scope} data)'
-            title = 'High-Resolution Spectral Library'
-        # plt.title(title, fontsize=cfg.TITLE_S) # update - removing titles from plots
+            title = f'Laboratory {cat} {mnrl}'
+        plt.title(title, fontsize=cfg.LABEL_S) # update - removing titles from plots
 
         # save legend separately
-        if cat != 'all':
-            label_params = ax.get_legend_handles_labels()
-            ax.get_legend().remove()
-            figl, axl = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-            axl.axis(False)
-            n_ids = len(data_df['Data ID'].unique())
-            leg = axl.legend(*label_params, loc="center",
-                bbox_to_anchor=(0.5, 0.5),
-                ncol=-(-n_ids // 20),
-                fontsize='xx-small')
-            leg.set_title(leg_title, prop={'size': 'x-small'})
+        # if cat != 'all':
+        #     label_params = ax.get_legend_handles_labels()
+        #     ax.get_legend().remove()
+        #     figl, axl = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        #     axl.axis(False)
+        #     n_ids = len(data_df['Data ID'].unique())
+        #     leg = axl.legend(*label_params, loc="center",
+        #         bbox_to_anchor=(0.5, 0.5),
+        #         ncol=-(-n_ids // 20),
+        #         fontsize='xx-small')
+        #     leg.set_title(leg_title, prop={'size': 'x-small'})
 
         # ax.legend().set_in_layout(False)
         fig.tight_layout()
@@ -263,11 +299,11 @@ class SpectralLibraryAnalyser():
         else:
             filename = f'{project_str}_{cat}_{mnrl}_{scope}'+sfx
         output_file = Path(out_dir, filename).with_suffix(cfg.PLT_FRMT)
-        fig.savefig(output_file)
+        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0)
 
-        if cat != 'all':
-            legend_file=Path(out_dir,filename+'_lgnd').with_suffix(cfg.PLT_FRMT)
-            figl.savefig(legend_file)
+        # if cat != 'all':
+        #     legend_file=Path(out_dir,filename+'_lgnd').with_suffix(cfg.PLT_FRMT)
+        #     figl.savefig(legend_file)
 
         return ax
 
@@ -706,7 +742,10 @@ class SpectralLibraryAnalyser():
         col_obj.main_df['Y*'] = xyY[:,2]
 
         # add colour space information
-        col_obj.main_df['Colour-Space'] = 'sRGB'
+        if self.obj_type == 'observation':
+            col_obj.main_df['Colour-Space'] = f'{self.spectra_obj.instrument.name} sRGB'
+        else:
+            col_obj.main_df['Colour-Space'] = 'Laboratory sRGB'
 
         return col_obj
 
@@ -777,11 +816,37 @@ class SpectralLibraryAnalyser():
 
         min_names = colour_obj.main_df['Mineral Name'][index]
         cats = colour_obj.main_df['Category'][index]
+        
+        title_sfx = f"{colour_obj.main_df['Colour-Space'][index].iloc[0]}"
 
-        if 'Colour-Space' in colour_obj.main_df.columns:
-            title_sfx = f"{colour_obj.main_df['Colour-Space'][index].iloc[0]}"
-        # elif 'Illuminant' in colour_obj.main_df.columns:
-        #     title_sfx = f"{colour_obj.main_df['Illuminant'][index].iloc[0]}"
+        # plot the colour matching functions or the instrument profiles
+        if 'sRGB' in title_sfx:
+            # get the cmfs
+            cmfs = colour.MSDS_CMFS['CIE 1931 2 Degree Standard Observer']
+            extrap_params = colour.SpectralShape(cfg.SAMPLE_RES['wvl_min'], 
+                                                 cfg.SAMPLE_RES['wvl_max'], 
+                                                 cfg.SAMPLE_RES['delta_wvl'])
+            profiles = cmfs.extrapolate(extrap_params).values
+            wvls = cmfs.extrapolate(extrap_params).wavelengths
+            labels = ['$\hat{x}$', '$\hat{y}$', '$\hat{z}$']
+        else:
+            # get the instrument profiles
+            # split the filter-ids from colour space
+            filter_ids = title_sfx.split('-')
+            trans_df = self.spectra_obj.instrument.get_trans_df()
+            profiles = trans_df.loc[filter_ids].to_numpy().transpose()
+            wvls = cfg.WVLS
+            labels = filter_ids
+                                
+        fig, ax = plt.subplots(1, 1, figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), dpi=cfg.DPI)
+        cols = ['r', 'g', 'b']
+        for profile in profiles.transpose():
+            ax.plot(wvls, profile, color=cols.pop(0), label=labels.pop(0), lw=0.8)
+        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
+        ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
+        ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
+        ax.set_title(title_sfx, fontsize=cfg.LABEL_S)
+        fig.show()
 
         # make a separate  plot for each category
         uniq_cats = cats.unique()
@@ -806,14 +871,6 @@ class SpectralLibraryAnalyser():
             max_vertical_inches = 10
             n_cols = int(np.ceil(n*0.5 / max_vertical_inches))
             n_rows = int(np.ceil(n / n_cols))
-
-            # if n_cols > 4:
-            #     n_sheets = int(np.ceil(n_cols / 4))
-            #     n_cols = 4
-            # else:
-            #     n_sheets = 1
-
-            # for sheet in np.arange(n_sheets):
             
             fig, axes = plt.subplots(1, n_cols, figsize=(2.5*n_cols, n_rows*0.5))
 
@@ -821,9 +878,8 @@ class SpectralLibraryAnalyser():
                 axes = [axes]
             
             for i in np.arange(n_cols):
-
                 ax = axes[i]
-                if i != n_cols-1:
+                if i != n_cols-1:   
                     ax_pal = pal[n_rows*i:n_rows*(i+1)]
                     ax_swatch_names = swatch_names[n_rows*i:n_rows*(i+1)]
                 else:
@@ -841,6 +897,7 @@ class SpectralLibraryAnalyser():
                 ax.tick_params(axis='y', which='both', length=0)            
                 ax.set_yticklabels(ax_swatch_names, fontsize=8)
                 ax.xaxis.set_major_locator(ticker.NullLocator())                
+
             fig.suptitle(cat +': '+title_sfx, fontsize=12)
             fig.tight_layout()
 
@@ -879,12 +936,12 @@ class SpectralLibraryAnalyser():
         handles, labels = ax.get_legend_handles_labels()
 
         if len(labels) > 20:
-            labels = uniq_cats
+            labels = uniq_cats.categories.to_list()
             # set the handle to the category symbol
             handles = [mpl.lines.Line2D([0], [0], 
                                 color='w', markeredgecolor='k', 
                                 marker=syms_list[i], markersize=6, 
-                                label=cat) for i, cat in enumerate(uniq_cats)]
+                                label=uniq_cats.categories.to_list()[i]) for i in np.arange(len(uniq_cats))]
 
         else:
             # insert category labels into the legend        

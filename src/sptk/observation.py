@@ -923,6 +923,7 @@ class Observation():
         """
         plotter = SpectralLibraryAnalyser(self)
         colour_spectra_obj = plotter.compute_colour(illuminant)
+        self.colour_df = colour_spectra_obj.main_df
         fig = plotter.render_colour(colour_spectra_obj)
         return colour_spectra_obj, fig
     
@@ -938,5 +939,6 @@ class Observation():
         """
         plotter = SpectralLibraryAnalyser(self)
         false_colour_obs = plotter.compute_false_colour(filter_ids)
+        self.false_colour_df = false_colour_obs.colour_df
         fig = plotter.render_colour(false_colour_obs)
         return false_colour_obs, fig

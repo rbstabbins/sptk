@@ -127,6 +127,8 @@ class SpectralLibraryAnalyser():
                             ci=ci,
                             hires_under=hires_under)
                 axes.append(ax)
+        
+        # put all axes into a new figure
 
         if cfg.TIME_IT:
             toc = time.perf_counter()
@@ -267,29 +269,7 @@ class SpectralLibraryAnalyser():
             title = f'Laboratory {cat} {mnrl}'
         plt.title(title, fontsize=cfg.LABEL_S) # update - removing titles from plots
 
-        # save legend separately
-        # if cat != 'all':
-        #     label_params = ax.get_legend_handles_labels()
-        #     ax.get_legend().remove()
-        #     figl, axl = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        #     axl.axis(False)
-        #     n_ids = len(data_df['Data ID'].unique())
-        #     leg = axl.legend(*label_params, loc="center",
-        #         bbox_to_anchor=(0.5, 0.5),
-        #         ncol=-(-n_ids // 20),
-        #         fontsize='xx-small')
-        #     leg.set_title(leg_title, prop={'size': 'x-small'})
-
-        # ax.legend().set_in_layout(False)
         fig.tight_layout()
-        # if cat != 'all':
-        #     try:
-        #         figl.tight_layout()
-        #     except UserWarning:
-        #         axl.legend(*label_params, loc="center",
-        #             bbox_to_anchor=(0.5, 0.5),
-        #             ncol=-(-data_df.shape[1] // 35),
-        #             fontsize=3.0)
 
         # save figure
         project_str = self.spectra_obj.project_name
@@ -300,10 +280,6 @@ class SpectralLibraryAnalyser():
             filename = f'{project_str}_{cat}_{mnrl}_{scope}'+sfx
         output_file = Path(out_dir, filename).with_suffix(cfg.PLT_FRMT)
         fig.savefig(output_file, bbox_inches='tight', pad_inches = 0)
-
-        # if cat != 'all':
-        #     legend_file=Path(out_dir,filename+'_lgnd').with_suffix(cfg.PLT_FRMT)
-        #     figl.savefig(legend_file)
 
         return ax
 
@@ -739,7 +715,7 @@ class SpectralLibraryAnalyser():
 
         col_obj.main_df['x'] = xyY[:,0]
         col_obj.main_df['y'] = xyY[:,1]
-        col_obj.main_df['Y*'] = xyY[:,2]
+        col_obj.main_df['Y*'] = xyY[:,2]*100
 
         # add colour space information
         if self.obj_type == 'observation':
@@ -846,8 +822,8 @@ class SpectralLibraryAnalyser():
         ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
         ax.set_title(title_sfx, fontsize=cfg.LABEL_S)
-        fig.show()
-
+        
+        # Make figure of colour of each entry, grouped by category
         # make a separate  plot for each category
         uniq_cats = cats.unique()
         for cat in uniq_cats:
@@ -858,8 +834,9 @@ class SpectralLibraryAnalyser():
             cat_rgb = cat_rgb.loc[cat_index].to_numpy() / 255
             min_list = cat_index.to_list()
             swatch_names = []
+
+            # name swatch by Mineral Name, Sample ID
             for min in min_list:          
-                # name swatch by Mineral Name, Sample ID
                 swatch_name = f"{min_names.loc[min]}\n{min}"  
                 swatch_names.append(swatch_name)
 

@@ -319,9 +319,13 @@ class SpectralParameters():
             print("Computing "+str(len(chnls[0]))+" Slope spectral parameters:")
         # get data for the bands in the lists
         b_df, b_cwls, b_filters = self.get_channel_data(chnls)
+
+        # new - scale wavelengths to microns, so that slop is reflectance/micron
+        # assumes that the wavelength is in nm - so far this is fixed for sptk.
+
         # Slope operation
         sp_data = np.divide(b_df[0].to_numpy() - b_df[1].to_numpy(),
-                                                        (b_cwls[0] - b_cwls[1]))
+                                                        (b_cwls[0] - b_cwls[1])/1000)
         # Construct list of spectral parameter labels
         sp_pfx = ['S'] * len(b_filters[0]) # shorthand for 'Slope'
         sp_lbls = [a+'_'+str(b)+'_'+str(c)
@@ -677,7 +681,10 @@ class SpectralParameters():
         ratio_df = ratio_df.reset_index(drop=True)
         ratio_df_mlt = pd.melt(
             ratio_df, id_vars='Category', var_name='spectral_parameter')   
+        
+        # take the log of the ratio values
         ratio_df_mlt['value'] = np.log10(ratio_df_mlt['value'])
+
         plt.rcParams.update({'font.size': 8})
         # make a FacetGrid object for the plotting
         g = sns.FacetGrid(
@@ -870,3 +877,84 @@ class SpectralParameters():
                                'feature_histograms',
                             'shoulder_height_'+ce_wvl).with_suffix('.pdf')
             plt.savefig(output_file,bbox_inches='tight')
+
+    def colormap_gridplot(self):
+
+        sp_types = SP_CODES.keys() # get the SP types
+
+        # set the plot vertical-horizontal ratios for each SP type
+        ratios = [len(self.parse_sp_lbls(self.sp_list, sp_type)) 
+                                    for i, sp_type in enumerate(sp_types)]
+
+        # define colormaps used to show distributions spectral parameter values
+        sp_cmaps = {
+            'channel': 'viridis',
+            'log10(ratio)': 'RdBu',
+            'slope': 'RdBu',
+            'band_depth': 'RdBu',
+            'shoulder_height': 'RdBu'
+        }
+
+        # min_list = self.main_df['Mineral Name'].unique()
+        min_list = self.main_df.index
+
+        height = 2 + (20 + len(min_list)) * cfg.LABEL_S / 72.0 # height of axis in inches, from number of minerals plus padding for SP labels
+        
+        width = len(sp_types)*0.2 + (15 + np.array(ratios).sum()) * cfg.LABEL_S / 72.0
+
+        fig, ax = plt.subplots(1,len(sp_types),
+                               figsize=(width, height),
+                               sharey=True,
+                               width_ratios=ratios,                               
+                               dpi=cfg.DPI)
+        
+        
+        # draw coloured gridplots for each SP type
+        for i, sp_type in enumerate(sp_types):
+            sp_type_list = self.parse_sp_lbls(self.sp_list, sp_type)
+            
+            # average over mineral name - should be optional
+            sps_arr = self.main_df #.groupby('Mineral Name').mean(numeric_only=True)            
+            sps_arr = sps_arr[sp_type_list].to_numpy()
+
+            #if ratio, take log10
+            if sp_type == 'ratio':
+                sps_arr = np.log10(sps_arr)
+                sp_type = 'log10('+sp_type+')'
+
+            # set colourbar limits
+            vmax=np.nanmax(sps_arr)
+            vmin=np.nanmin(sps_arr)
+
+            vmax = np.nanmax([vmax, -vmin])
+            if sp_type == 'channel':
+                vmin=0.0            
+            else:
+                vmin = -vmax
+            # define colour bar
+            cax = ax[i].pcolor(sps_arr, 
+                               edgecolors='k', 
+                               cmap=sp_cmaps[sp_type], 
+                               vmin=vmin, vmax=vmax)
+            
+            # format coloured gridplot
+            ax[i].set_xticks(np.arange(len(sp_type_list)), minor=False)
+            ax[i].set_xticklabels(sp_type_list, rotation=90, ha='left', fontsize=cfg.LABEL_S)
+            ax[i].set_yticks(np.arange(len(min_list)), minor=False)
+            ax[i].set_yticklabels(min_list, fontsize=cfg.LABEL_S, va='baseline')                        
+            ax[i].set_aspect('equal')
+            if len(sp_type_list) < 7:
+                sp_type_label = sp_type.replace('_', '\n').title().capitalize()
+            else:
+                sp_type_label = sp_type.replace('_', ' ').title().capitalize()
+            cbar = fig.colorbar(cax, ax=ax[i], 
+                                location='top',                                 
+                                pad=0.02,                          
+                                aspect=len(sp_type_list))
+            cbar.set_label(sp_type_label, fontsize=cfg.LEGEND_S)
+            cbar.ax.tick_params(labelrotation=45, 
+                                direction='out',
+                                labelsize=cfg.LEGEND_S)
+
+        # fig.suptitle(f'{self.instrument.name} Spectral Parameters')
+        fig.tight_layout()

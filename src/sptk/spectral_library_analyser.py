@@ -824,7 +824,95 @@ class SpectralLibraryAnalyser():
         ax.set_title(title_sfx, fontsize=cfg.LABEL_S)
         
         # Make figure of colour of each entry, grouped by category
-        # make a separate  plot for each category
+ 
+        N_rows = 10 # max number of rows allowed for 1 page / 1 fig
+        N_cols = 6 # max number of columns allowed for 1 page / 1 fig
+        N_fig = N_rows * N_cols # max number of sites allowed for 1 page / 1 fig
+        spacing = 1.2 # space in inches between rows and columns
+
+        N_cats = len(cats.unique()) # number of categories
+        n_cats = {} # dict to store number of entries in each category
+        n_figs = {} # dict to store number of sites needed for each category
+        cat_cols = {} # dict to store number of columns needed for each category
+        cat_rows = {} # dict to store number of rows needed for each category
+        n_tot = 0 # total number of sites needed for all categories
+        for cat in cats.unique():
+            n_cat = len(cats[cats == cat]) # number of entries in given category
+            n_cats[cat] = n_cat
+            if n_cat >= N_cols:
+                cat_cols[cat] = N_cols
+                cat_rows[cat] = int(np.ceil(n_cat / N_cols))
+            else:
+                cat_cols[cat] = n_cat
+                cat_rows[cat] = 1
+            n_fig = cat_rows[cat] * N_cols # number of sites needed for given category - N_rows is not the right number here...
+            n_figs[cat] = n_fig
+            n_tot += n_fig # running total of sites needed for all categories
+
+        N_pages = 1 + (n_tot-1) // N_fig # number of pages needed to plot all sites
+
+        # populate pages in cycle
+        n_left = N_fig # number of available sites on page
+        
+        for page in np.arange(N_pages):
+            # compute which categories can fit onto page
+            cat_list = cats.unique().to_list()
+            cats_on_page = []
+            l = len(cat_list)
+            while (l > 0): # (n_left > 0) or 
+                cat = cat_list.pop()
+                cats_on_page.append(cat)          
+                n_left -= n_figs[cat] # note each n_figs value should give filled columns and rows.
+                l = len(cat_list)
+            n_cats_on_page = len(cats_on_page)
+
+            page_rows_used = int((N_fig - n_left) / N_cols)
+
+            fig = plt.figure(figsize=(N_cols*spacing, page_rows_used*spacing), dpi=cfg.DPI, layout='compressed')
+            spec = fig.add_gridspec(page_rows_used,1)
+            
+            r = 0
+            for c, cat in enumerate(cats_on_page):
+                # scatterplot points evenly over the N_cols and N_rows of the grid.
+                # get the index of the samples in this category
+                cat_index = cats[cats == cat].index
+                cat_rgb = colour_obj.main_df[['R', 'G', 'B']].loc[cat_index]  
+                
+                if c == 0:
+                    ax_c = fig.add_subplot(spec[r:r+cat_rows[cat], :], adjustable='box')                             
+                else:
+                    ax_c = fig.add_subplot(spec[r:r+cat_rows[cat], :], adjustable='box')                            
+                r += cat_rows[cat]
+                for i, entry in enumerate(cat_index):
+                    x = i % cat_cols[cat] + 0.5
+                    y = np.ceil(i // cat_cols[cat]) + 0.5
+                    col = cat_rgb.loc[entry].to_numpy()/255
+                    ax_c.scatter(x,y,
+                                    color=col,
+                                    s=200,
+                                    edgecolor='black')
+                    # annotate
+                    # turn underscore into carriage return
+                    entry = str(entry).replace('_', '\n')
+                    entry = str(entry).replace(' ', '\n')
+                    ax_c.annotate(entry, (x, y), 
+                                     (0,-1.5), 
+                                     textcoords='offset fontsize', 
+                                     fontsize=cfg.LABEL_S, 
+                                     ha='center', va='top')
+                # remove the axes
+                ax_c.set_xlim(0, cat_cols[cat], auto=False)
+                ax_c.set_ylim(0, cat_rows[cat], auto=False)
+                ax_c.invert_yaxis()
+                ax_c.set_aspect('equal', adjustable='box', share=True)
+                ax_c.axis('off')
+                # set title
+                ax_c.set_title(str.capitalize(cat), fontsize=cfg.TITLE_S, y = 1.0, verticalalignment= 'bottom', pad=-cfg.TITLE_S)            
+            fig.suptitle('MICA '+title_sfx, fontsize=cfg.TITLE_S)
+            fig.tight_layout()
+
+
+        # make a separate  plot for each        category
         uniq_cats = cats.unique()
         for cat in uniq_cats:
 

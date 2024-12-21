@@ -36,6 +36,8 @@ LABEL_S = 8
 TITLE_S = 10
 LEGEND_S = 6
 
+# TODO - make Tex rendering global. #plt.rcParams['text.usetex'] = True
+
 """Exports"""
 EXPORT_DF = True
 LOAD_EXISTING = True # if True load existing directories, else build new

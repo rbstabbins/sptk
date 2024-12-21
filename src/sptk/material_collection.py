@@ -87,6 +87,7 @@ class MaterialCollection():
         self.project_dir, self.project_name = cfg.build_project_directory(
             project_name, 'material_collection')
         self.object_dir = Path(self.project_dir / 'material_collection')
+        self.spectral_library = spectral_library
         self.material_file_dict = MaterialCollection.parse_materials(
             materials, spectral_library)
         self.categories = list(self.material_file_dict.keys())

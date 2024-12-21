@@ -67,6 +67,7 @@ class Observation():
         self.object_dir = Path(self.project_dir / 'observation')
 
         self.material_collection = material_collection
+        self.spectral_library = self.material_collection.spectral_library
         self.categories = self.material_collection.categories
 
         self.instrument = instrument

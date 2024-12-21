@@ -822,68 +822,121 @@ class SpectralLibraryAnalyser():
         ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
         ax.set_title(title_sfx, fontsize=cfg.LABEL_S)
-        
-        # Make figure of colour of each entry, grouped by category
+
+         # Make figure of colour of each entry, grouped by category
  
-        N_rows = 10 # max number of rows allowed for 1 page / 1 fig
-        N_cols = 6 # max number of columns allowed for 1 page / 1 fig
-        N_fig = N_rows * N_cols # max number of sites allowed for 1 page / 1 fig
-        spacing = 1.2 # space in inches between rows and columns
+        # define page settings
+        N_rows = 8 # max number of rows allowed for 1 page / 1 fig
+        N_cols = 6 # max number of columns allowed for 1 page / 1 fig        
+        spacing = 1.0 # space in inches between rows and columns
 
-        N_cats = len(cats.unique()) # number of categories
-        n_cats = {} # dict to store number of entries in each category
-        n_figs = {} # dict to store number of sites needed for each category
-        cat_cols = {} # dict to store number of columns needed for each category
-        cat_rows = {} # dict to store number of rows needed for each category
-        n_tot = 0 # total number of sites needed for all categories
+        # initiate category counter dicts
+        cat_ns = {}     # dict of entries in each category        
+        cat_cols = {}   # dict of columns needed for each category
+        cat_rows = {}   # dict of rows needed for each category
+        t_rows = 0 # counter of total number of rows needed for all categories
+
+        # populate category counters
         for cat in cats.unique():
-            n_cat = len(cats[cats == cat]) # number of entries in given category
-            n_cats[cat] = n_cat
-            if n_cat >= N_cols:
-                cat_cols[cat] = N_cols
-                cat_rows[cat] = int(np.ceil(n_cat / N_cols))
+            cat_n = len(cats[cats == cat]) # number of entries in given category
+            cat_ns[cat] = cat_n # dict lookup of # entries in category
+            if cat_n >= N_cols: # if there are more entries than columns...
+                cat_cols[cat] = N_cols  # ...set number of columns to N_cols
+                cat_rows[cat] = int(np.ceil(cat_n / N_cols)) # compute the number of rows needed given the fixed # columns
             else:
-                cat_cols[cat] = n_cat
-                cat_rows[cat] = 1
-            n_fig = cat_rows[cat] * N_cols # number of sites needed for given category - N_rows is not the right number here...
-            n_figs[cat] = n_fig
-            n_tot += n_fig # running total of sites needed for all categories
+                cat_cols[cat] = cat_n # otherwise the number of columns is the number of entries
+                cat_rows[cat] = 1 # and the numebr of rows is 1                        
+            t_rows += cat_rows[cat] # running total of rows needed for all categories
 
-        N_pages = 1 + (n_tot-1) // N_fig # number of pages needed to plot all sites
+        N_pages = 1 + (t_rows-1) // N_rows # number of pages needed to plot all sites
+        page_cats = {}
 
-        # populate pages in cycle
-        n_left = N_fig # number of available sites on page
-        
+        # populate page slices
+        page = 0
+        cat_list = cats.unique().to_list()
+        cat = cat_list.pop()
+        cat_rows_left = cat_rows[cat]
+        rows_used = 0
+        i = 0
+        f = 0
+        page_cats[page] = {}
+        # need to count the rows used up of the page...if it hits N_rows, then move to next page
+        page_rows = 0        
+        while rows_used < t_rows:   # until every row of the library is rendered...                     
+            if cat_rows_left + page_rows < N_rows: # if the rest of the category fits on the page...
+                # add the category to the page
+                f = i + cat_rows_left*N_cols - 1
+                page_cats[page][cat] = (i,f)
+                page_rows += cat_rows_left
+                rows_used += cat_rows_left
+                if f < i:
+                    print('stop')
+                if len(cat_list) > 0:
+                    cat = cat_list.pop()
+                    cat_rows_left = cat_rows[cat]
+                    i = 0                
+            elif cat_rows_left + page_rows == N_rows: # if the rest of the category fills the page...
+                # add the category to the page
+                f = i + cat_rows_left*N_cols - 1
+                page_cats[page][cat] = (i,f)
+                page_rows += cat_rows_left
+                rows_used += cat_rows_left
+                if f < i:
+                    print('stop')
+                if len(cat_list) > 0:
+                    cat = cat_list.pop()
+                    cat_rows_left = cat_rows[cat]
+                    i = 0
+                if rows_used < t_rows:
+                    page += 1
+                    page_rows = 0
+                    page_cats[page] = {}
+            elif cat_rows_left + page_rows > N_rows: # if the rest of the category does not fit on the page...
+                # only use rows up to total of N_rows
+                cat_r = N_rows - page_rows # the number of rows available
+                f = i + cat_r*N_cols - 1
+                cat_rows_left -= cat_r
+                rows_used += cat_r
+                page_rows += cat_r
+                page_cats[page][cat] = (i,f)
+                if f < i:
+                    print('stop')
+                page += 1
+                page_rows = 0
+                page_cats[page] = {}
+                i = f + 1
+
         for page in np.arange(N_pages):
-            # compute which categories can fit onto page
-            cat_list = cats.unique().to_list()
-            cats_on_page = []
-            l = len(cat_list)
-            while (l > 0): # (n_left > 0) or 
-                cat = cat_list.pop()
-                cats_on_page.append(cat)          
-                n_left -= n_figs[cat] # note each n_figs value should give filled columns and rows.
-                l = len(cat_list)
-            n_cats_on_page = len(cats_on_page)
-
-            page_rows_used = int((N_fig - n_left) / N_cols)
-
-            fig = plt.figure(figsize=(N_cols*spacing, page_rows_used*spacing), dpi=cfg.DPI, layout='compressed')
-            spec = fig.add_gridspec(page_rows_used,1)
+            # get the categories on the page
+            cats_on_page = list(page_cats[page].keys())
+            # get the total number of rows used
+            rows_used = 0
+            for cat in cats_on_page:                
+                rows_used += int((page_cats[page][cat][1] - page_cats[page][cat][0] + 1) / N_cols)
             
+            # draw figure on page
+            fig = plt.figure(figsize=(N_cols*spacing, rows_used*spacing), dpi=cfg.DPI, layout='compressed')
+            spec = fig.add_gridspec(rows_used,1)
+
             r = 0
             for c, cat in enumerate(cats_on_page):
                 # scatterplot points evenly over the N_cols and N_rows of the grid.
-                # get the index of the samples in this category
-                cat_index = cats[cats == cat].index
-                cat_rgb = colour_obj.main_df[['R', 'G', 'B']].loc[cat_index]  
-                
-                if c == 0:
-                    ax_c = fig.add_subplot(spec[r:r+cat_rows[cat], :], adjustable='box')                             
-                else:
-                    ax_c = fig.add_subplot(spec[r:r+cat_rows[cat], :], adjustable='box')                            
-                r += cat_rows[cat]
-                for i, entry in enumerate(cat_index):
+
+                # get the number of rows used by this category
+                cat_r = int((page_cats[page][cat][1] - page_cats[page][cat][0] + 1) / N_cols)
+                if cat_r == 0:
+                    print('stop')
+                ax_c = fig.add_subplot(spec[r:r+cat_r, :], adjustable='box')
+
+                r += cat_r
+
+                # get the index of the samples in this category    
+                i = page_cats[page][cat][0]
+                f = page_cats[page][cat][1]            
+                cat_df = colour_obj.main_df[colour_obj.main_df['Category'] == cat]
+                cat_rgb = cat_df[['R', 'G', 'B']].iloc[i:f+1]
+
+                for i, entry in enumerate(cat_rgb.index):
                     x = i % cat_cols[cat] + 0.5
                     y = np.ceil(i // cat_cols[cat]) + 0.5
                     col = cat_rgb.loc[entry].to_numpy()/255
@@ -893,80 +946,30 @@ class SpectralLibraryAnalyser():
                                     edgecolor='black')
                     # annotate
                     # turn underscore into carriage return
+                    # get mineral name
+                    min_name = colour_obj.main_df.loc[entry]['Mineral Name']
                     entry = str(entry).replace('_', '\n')
                     entry = str(entry).replace(' ', '\n')
+                    entry = entry.title() 
+                    entry = min_name.title() + '\n' + entry
                     ax_c.annotate(entry, (x, y), 
                                      (0,-1.5), 
                                      textcoords='offset fontsize', 
-                                     fontsize=cfg.LABEL_S, 
+                                     fontsize=cfg.LEGEND_S, 
                                      ha='center', va='top')
                 # remove the axes
                 ax_c.set_xlim(0, cat_cols[cat], auto=False)
-                ax_c.set_ylim(0, cat_rows[cat], auto=False)
+                ax_c.set_ylim(0, cat_r, auto=False)
                 ax_c.invert_yaxis()
                 ax_c.set_aspect('equal', adjustable='box', share=True)
                 ax_c.axis('off')
                 # set title
                 ax_c.set_title(str.capitalize(cat), fontsize=cfg.TITLE_S, y = 1.0, verticalalignment= 'bottom', pad=-cfg.TITLE_S)            
-            fig.suptitle('MICA '+title_sfx, fontsize=cfg.TITLE_S)
-            fig.tight_layout()
-
-
-        # make a separate  plot for each        category
-        uniq_cats = cats.unique()
-        for cat in uniq_cats:
-
-            # get the index of the samples in this category
-            cat_index = cats[cats == cat].index
-            cat_rgb = colour_obj.main_df[['R', 'G', 'B']]
-            cat_rgb = cat_rgb.loc[cat_index].to_numpy() / 255
-            min_list = cat_index.to_list()
-            swatch_names = []
-
-            # name swatch by Mineral Name, Sample ID
-            for min in min_list:          
-                swatch_name = f"{min_names.loc[min]}\n{min}"  
-                swatch_names.append(swatch_name)
-
-            # Pallete plot list of colours for this category
-            pal = sns.color_palette(cat_rgb)
-            n = len(pal)
-
-            # make the figure, according to number of samples
-            max_vertical_inches = 10
-            n_cols = int(np.ceil(n*0.5 / max_vertical_inches))
-            n_rows = int(np.ceil(n / n_cols))
-            
-            fig, axes = plt.subplots(1, n_cols, figsize=(2.5*n_cols, n_rows*0.5))
-
-            if not isinstance(axes, np.ndarray):
-                axes = [axes]
-            
-            for i in np.arange(n_cols):
-                ax = axes[i]
-                if i != n_cols-1:   
-                    ax_pal = pal[n_rows*i:n_rows*(i+1)]
-                    ax_swatch_names = swatch_names[n_rows*i:n_rows*(i+1)]
-                else:
-                    ax_pal = pal[n_rows*i:]
-                    ax_swatch_names = swatch_names[n_rows*i:]
-                    n_rows = len(ax_pal)   
-
-                ax.imshow(np.arange(n_rows).reshape(n_rows, 1),
-                        cmap=mpl.colors.ListedColormap(list(ax_pal)),
-                        interpolation="nearest", aspect='equal')
-
-                ax.yaxis.tick_right()
-                ax.set_xticks([-.5, .5])
-                ax.set_yticks(np.arange(n_rows))
-                ax.tick_params(axis='y', which='both', length=0)            
-                ax.set_yticklabels(ax_swatch_names, fontsize=8)
-                ax.xaxis.set_major_locator(ticker.NullLocator())                
-
-            fig.suptitle(cat +': '+title_sfx, fontsize=12)
+            fig.suptitle(f'{self.spectra_obj.spectral_library} '+title_sfx, fontsize=cfg.TITLE_S)
             fig.tight_layout()
 
         # plotting in chromaticity space
+        uniq_cats = cats.unique()
         fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
             show=False, 
             show_spectral_locus=True,
@@ -983,13 +986,14 @@ class SpectralLibraryAnalyser():
         for i, min in enumerate(min_list):
            
             sym = syms_list[cat_codes.loc[min]]
-            swatch_name = f"{min}"
+            swatch_name = f"{min}".capitalize()
                         
             xy = xyY[i, 0:2]
             x, y = xy
             ax.plot(x, y, 
                     f"{sym}", color=list(rgb[i]), 
                     label=swatch_name, 
+                    markeredgewidth=0.5,
                     markeredgecolor='white', markersize=4)
         
         # plot the sRGB space in the chromaticity diagram

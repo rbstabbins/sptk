@@ -917,7 +917,8 @@ class Observation():
         return axes
     
     def render_colour(self, 
-            illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65'
+            illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
+            srgb_compare: bool=False
             ) -> Tuple[pd.DataFrame, plt.figure]:
         """Render the colour of the material collection under the specified
         illuminant.
@@ -925,11 +926,16 @@ class Observation():
         plotter = SpectralLibraryAnalyser(self)
         colour_spectra_obj = plotter.compute_colour(illuminant)
         self.colour_df = colour_spectra_obj.main_df
-        fig = plotter.render_colour(colour_spectra_obj)
+        if srgb_compare:
+            fig = plotter.render_colour(colour_spectra_obj, srgb_compare=self)
+        else:
+            fig = plotter.render_colour(colour_spectra_obj)
         return colour_spectra_obj, fig
     
     def render_false_colour(self,
-            filter_ids: Tuple[str, str, str]) -> Tuple[pd.DataFrame, plt.figure]:
+            filter_ids: Tuple[str, str, str],
+            srgb_compare: bool=False
+            ) -> Tuple[pd.DataFrame, plt.figure]:
         """Render the false colour image of the Observation for the given 
         instrument filters.
         
@@ -940,6 +946,9 @@ class Observation():
         """
         plotter = SpectralLibraryAnalyser(self)
         false_colour_obs = plotter.compute_false_colour(filter_ids)
-        self.false_colour_df = false_colour_obs.colour_df
-        fig = plotter.render_colour(false_colour_obs)
+        self.false_colour_df = false_colour_obs.colour_df        
+        if srgb_compare:
+            fig = plotter.render_colour(false_colour_obs, srgb_compare=self)
+        else:
+            fig = plotter.render_colour(false_colour_obs)
         return false_colour_obs, fig

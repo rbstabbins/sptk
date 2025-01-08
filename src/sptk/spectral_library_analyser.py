@@ -13,7 +13,7 @@ from ast import literal_eval
 import copy
 import os
 import time
-from typing import Literal, Tuple
+from typing import Literal, Tuple, Union
 import colour
 import pandas as pd
 import matplotlib as mpl
@@ -653,12 +653,13 @@ class SpectralLibraryAnalyser():
     # """
 
     def compute_colour(self,
-                illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D50'
+                illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
+                cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
                        ) -> object:
         """Compute the colour of each entry in the Material Collection or 
         Observation according to the given illuminant.
 
-        :param illuminant: illuminant to use to compute colour, defaults to 'D50'
+        :param illuminant: illuminant to use to compute colour, defaults to 'D65'
         :type illuminant: str, optional
         :return: Table of colours for each entry
         :rtype: pd.DataFrame
@@ -674,27 +675,29 @@ class SpectralLibraryAnalyser():
         col_obj.main_df.rename(columns={"Reflectance": "Colour"}, inplace=True)
         # add illuminant metadata
         col_obj.main_df['Illuminant'] = illuminant
-        
-        # compute XYZ and append to new colour df
-        
+                
         # convert the reflectance data to colour-science spectral ditributions
         sds = colour.MultiSpectralDistributions(refl_df.T)
         # get the illuminant
         illum = colour.SDS_ILLUMINANTS[illuminant]
         
         # convert the spectral distributions to XYZ space
-        # if material collection use ASTM E308, if observation use Integration
+        # set the integration method
         if self.obj_type == 'observation':
-            method = 'Integration'
+            method = 'Integration' # assume discrete non-continuous spectra
         else:
-            method = 'ASTM E308'
-
-        # # add the illuminant to the new colour df as new row
-        # xyz_illum = colour.sd_to_XYZ(illum, 
-        #                       illuminant=illum, k=1/100, method=method)
+            method = 'ASTM E308' # assume high-resolution continuous spectra
         
-        # convert to XYZ space
-        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1/100, method=method)
+        # set the colour matching functions
+        cmfs=colour.colorimetry.MSDS_CMFS[cmf_label]
+
+        # convert from spectra to XYZ tristimulus values
+        xyz = colour.sd_to_XYZ(
+                                sds, 
+                                cmfs=cmfs,
+                                illuminant=illum, 
+                                k=1/100, 
+                                method=method)
 
         # append the XYZ values to the new colour df
         col_obj.main_df['X'] = xyz[:,0]
@@ -702,9 +705,9 @@ class SpectralLibraryAnalyser():
         col_obj.main_df['Z'] = xyz[:,2]
 
         # convert the XYZ values to sRGB        
-        illum_ccs = colour.CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer'][illuminant]
+        illum_ccs = colour.CCS_ILLUMINANTS[cmf_label][illuminant]
         rgb = colour.XYZ_to_sRGB(xyz, illum_ccs)
-        rgb = np.clip(rgb, 0, 1) * 255
+        rgb = np.clip(rgb, 0, 1)
 
         col_obj.main_df['R'] = rgb[:,0]
         col_obj.main_df['G'] = rgb[:,1]
@@ -715,7 +718,25 @@ class SpectralLibraryAnalyser():
 
         col_obj.main_df['x'] = xyY[:,0]
         col_obj.main_df['y'] = xyY[:,1]
-        col_obj.main_df['Y*'] = xyY[:,2]*100
+
+        # convert to Lab
+        Lab = colour.XYZ_to_Lab(xyz, illum_ccs)
+
+        col_obj.main_df['L*'] = Lab[:,0]
+        col_obj.main_df['a*'] = Lab[:,1]
+        col_obj.main_df['b*'] = Lab[:,2]
+
+        # convert to Munsell
+        # have to loop over to catch bugs in conversion
+        Munsell = []
+        for this_xyY in xyY:
+            try:
+                this_munsell = colour.xyY_to_munsell_colour(this_xyY)
+            except:
+                this_munsell = np.nan
+            Munsell.append(this_munsell)
+
+        col_obj.main_df['Munsell'] = Munsell
 
         # add colour space information
         if self.obj_type == 'observation':
@@ -766,7 +787,7 @@ class SpectralLibraryAnalyser():
 
         false_col_obj.main_df['x'] = xyY[:,0]
         false_col_obj.main_df['y'] = xyY[:,1]
-        false_col_obj.main_df['Y*'] = xyY[:,2]
+        false_col_obj.main_df['Y'] = xyY[:,2]
 
         # add colour space information
         false_col_obj.main_df['Colour-Space'] = str.join('-', filter_ids)
@@ -774,28 +795,39 @@ class SpectralLibraryAnalyser():
         return false_col_obj
         
     def render_colour(self,
-            colour_obj: object) -> plt.figure:
+            colour_obj: object,
+            srgb_compare: Union[bool, object]=False) -> plt.figure:
         """Render the colour of each spectrum in the spectral library according
         to the given computed colour coordinates.
 
         :param colour_obj: Colour object with tables of RGB, XYZ and xyY values
         :type colour_obj: object, MaterialCollection or Observation
+        :param srgb_compare: Indicate if sRGB comparison is to be made,
+                defaults to False
+        :type srgb_compare: Union[bool, object], optional
         :return: Table of colours for each spectrum, and figure of colours
         :rtype: pd.DataFrame, plt.figure
         """        
         # load the spectral library        
         index = colour_obj.main_df.index
 
-        rgb = colour_obj.main_df[['R', 'G', 'B']].to_numpy() / 255
-        XYZ = colour_obj.main_df[['X', 'Y', 'Z']].to_numpy()
-        xyY = colour_obj.main_df[['x', 'y', 'Y*']].to_numpy()
+        rgb = colour_obj.main_df[['R', 'G', 'B']].to_numpy()
+        xyY = colour_obj.main_df[['x', 'y', 'Y']].to_numpy()
 
-        min_names = colour_obj.main_df['Mineral Name'][index]
         cats = colour_obj.main_df['Category'][index]
         
         title_sfx = f"{colour_obj.main_df['Colour-Space'][index].iloc[0]}"
 
-        # plot the colour matching functions or the instrument profiles
+        # if compare, load the comparison material collection colour df
+        if srgb_compare and self.obj_type == 'observation':
+            srgb_obj = srgb_compare.material_collection
+            srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
+            srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
+            srgb_cats = srgb_obj.colour_df['Category']
+            title_sfx = f"sRGB vs. {title_sfx}"
+
+        # ***plot the colour matching functions or the instrument profiles***        
+
         if 'sRGB' in title_sfx:
             # get the cmfs
             cmfs = colour.MSDS_CMFS['CIE 1931 2 Degree Standard Observer']
@@ -823,7 +855,7 @@ class SpectralLibraryAnalyser():
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
         ax.set_title(title_sfx, fontsize=cfg.LABEL_S)
 
-         # Make figure of colour of each entry, grouped by category
+        # ***Make figure of colour of each entry, grouped by category***
  
         # define page settings
         N_rows = 8 # max number of rows allowed for 1 page / 1 fig
@@ -924,8 +956,6 @@ class SpectralLibraryAnalyser():
 
                 # get the number of rows used by this category
                 cat_r = int((page_cats[page][cat][1] - page_cats[page][cat][0] + 1) / N_cols)
-                if cat_r == 0:
-                    print('stop')
                 ax_c = fig.add_subplot(spec[r:r+cat_r, :], adjustable='box')
 
                 r += cat_r
@@ -936,14 +966,35 @@ class SpectralLibraryAnalyser():
                 cat_df = colour_obj.main_df[colour_obj.main_df['Category'] == cat]
                 cat_rgb = cat_df[['R', 'G', 'B']].iloc[i:f+1]
 
+                # get the index of the comparison samples in this category
+                if srgb_compare and self.obj_type == 'observation':
+                    srgb_obj = srgb_compare.material_collection
+                    srgb_cat_df = srgb_obj.colour_df[srgb_obj.colour_df['Category'] == cat]
+                    srgb_cat_rgb = srgb_cat_df[['R', 'G', 'B']].iloc[i:f+1]                
+
                 for i, entry in enumerate(cat_rgb.index):
+                    
                     x = i % cat_cols[cat] + 0.5
                     y = np.ceil(i // cat_cols[cat]) + 0.5
-                    col = cat_rgb.loc[entry].to_numpy()/255
-                    ax_c.scatter(x,y,
-                                    color=col,
-                                    s=200,
-                                    edgecolor='black')
+
+                    if srgb_compare and self.obj_type == 'observation':
+                        srgb_col = srgb_cat_rgb.loc[entry].to_numpy()
+                        ax_c.scatter(x-0.15,y,
+                                        color=srgb_col,
+                                        s=200,
+                                        edgecolor='black')
+                        col = cat_rgb.loc[entry].to_numpy()
+                        ax_c.scatter(x+0.15,y,
+                                        color=col,
+                                        s=200,
+                                        edgecolor='black')
+                    else:
+                        col = cat_rgb.loc[entry].to_numpy()
+                        ax_c.scatter(x,y,
+                                        color=col,
+                                        s=200,
+                                        edgecolor='black')
+                    
                     # annotate
                     # turn underscore into carriage return
                     # get mineral name
@@ -968,7 +1019,25 @@ class SpectralLibraryAnalyser():
             fig.suptitle(f'{self.spectra_obj.spectral_library} '+title_sfx, fontsize=cfg.TITLE_S)
             fig.tight_layout()
 
-        # plotting in chromaticity space
+        # Plotting the RGB Cube
+        # make a 3D plot of rgb array
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(rgb[:,0], rgb[:,1], rgb[:,2], c=rgb, s=100)
+        ax.set_xlabel('R')
+        ax.set_ylabel('G')
+        ax.set_zlabel('B')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(0, 1)
+        ax.set_title(f'{title_sfx} RGB Cube')
+        fig.tight_layout()
+
+
+        # *** Plotting in chromaticity space ***
+
+        # TODO plot the comparison xyY coordinates, with annotations showing change
+        
         uniq_cats = cats.unique()
         fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
             show=False, 

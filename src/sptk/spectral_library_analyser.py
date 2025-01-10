@@ -238,13 +238,15 @@ class SpectralLibraryAnalyser():
                   )
 
         # plot title
+        Cat = cat.capitalize()
+        Mnrl = mnrl.capitalize()
         project_str = self.spectra_obj.project_name.replace('_', ' ')
         if self.obj_type == 'observation':
-            leg_title = f'Class: {cat}, Group: {mnrl} ({scope} data) - sampled'
+            leg_title = f'Class: {Cat}, Group: {mnrl} ({scope} data) - sampled'
             if ci:
-                title = f'{self.spectra_obj.instrument.name} {cat} {mnrl} Mean ± 1σ'
+                title = f'{self.spectra_obj.instrument.name} {Cat} {Mnrl} Mean ± 1σ'
             else:                
-                title = f'{self.spectra_obj.instrument.name} {cat} {mnrl}'
+                title = f'{self.spectra_obj.instrument.name} {Cat} {Mnrl}'
             if hires_under:
                 refl_df = self.spectra_obj.material_collection.get_refl_df(category=cat,
                                                             mineral_name=mnrl)
@@ -265,8 +267,8 @@ class SpectralLibraryAnalyser():
                     legend=False,
                     ax=ax)
         else:
-            leg_title = f'Class: {cat}, Group: {mnrl} ({scope} data)'
-            title = f'Laboratory {cat} {mnrl}'
+            leg_title = f'Class: {Cat}, Group: {Mnrl} ({scope} data)'
+            title = f'Laboratory {Cat} {Mnrl}'
         plt.title(title, fontsize=cfg.LABEL_S) # update - removing titles from plots
 
         fig.tight_layout()
@@ -652,6 +654,39 @@ class SpectralLibraryAnalyser():
     # Colour Processing & Rendering
     # """
 
+    def plot_cmfs(self, 
+            cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
+            ) -> Tuple[plt.figure, plt.Axes]:
+        """Plot the colour matching functions for the given observer.
+
+        :param cmf_label: Label of the colour matching functions, 
+                            defaults to 'CIE 1931 2 Degree Standard Observer'
+        :type cmf_label: str, optional
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.Axes]
+        """
+        # ***plot the colour matching functions or the instrument profiles***        
+
+        # get the cmfs
+        cmfs = colour.MSDS_CMFS[cmf_label]
+        extrap_params = colour.SpectralShape(cfg.SAMPLE_RES['wvl_min'], 
+                                                cfg.SAMPLE_RES['wvl_max'], 
+                                                cfg.SAMPLE_RES['delta_wvl'])
+        profiles = cmfs.extrapolate(extrap_params).values
+        wvls = cmfs.extrapolate(extrap_params).wavelengths
+        labels = ['$\hat{x}$', '$\hat{y}$', '$\hat{z}$']
+
+        fig, ax = plt.subplots(1, 1, figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), dpi=cfg.DPI)
+        cols = ['r', 'g', 'b']
+        for profile in profiles.transpose():
+            ax.plot(wvls, profile, color=cols.pop(0), label=labels.pop(0), lw=0.8)
+        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
+        ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
+        ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
+        ax.set_title(cmf_label, fontsize=cfg.LABEL_S)
+
+        return fig, ax
+    
     def compute_colour(self,
                 illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
                 cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
@@ -672,9 +707,7 @@ class SpectralLibraryAnalyser():
         
         # prepare the copied spectra object for colour rather than reflectance
         col_obj.main_df.drop(self.wvls, axis=1, inplace=True)
-        col_obj.main_df.rename(columns={"Reflectance": "Colour"}, inplace=True)
-        # add illuminant metadata
-        col_obj.main_df['Illuminant'] = illuminant
+        col_obj.main_df.rename(columns={"Reflectance": "Colour"}, inplace=True)        
                 
         # convert the reflectance data to colour-science spectral ditributions
         sds = colour.MultiSpectralDistributions(refl_df.T)
@@ -730,6 +763,7 @@ class SpectralLibraryAnalyser():
         # have to loop over to catch bugs in conversion
         Munsell = []
         for this_xyY in xyY:
+            # edit this to handle graysclae patches
             try:
                 this_munsell = colour.xyY_to_munsell_colour(this_xyY)
             except:
@@ -738,13 +772,16 @@ class SpectralLibraryAnalyser():
 
         col_obj.main_df['Munsell'] = Munsell
 
-        # add colour space information
-        if self.obj_type == 'observation':
-            col_obj.main_df['Colour-Space'] = f'{self.spectra_obj.instrument.name} sRGB'
-        else:
-            col_obj.main_df['Colour-Space'] = 'Laboratory sRGB'
+        # assign the new colour object df to the spectra object
+        # collect the colour space columns under the cmf_label multiindex
+        col_obj.main_df = col_obj.main_df.loc[:, 'Colour':]
+        # drop 'Colour' column
+        col_obj.main_df.drop('Colour', axis=1, inplace=True)
+        col_obj.main_df.columns = pd.MultiIndex.from_product([[cmf_label+' '+illuminant], col_obj.main_df.columns])
 
-        return col_obj
+        self.spectra_obj.colour_df = col_obj.main_df
+
+        return col_obj.main_df
 
     def compute_false_colour(self,
             filter_ids: Tuple[str, str, str]) -> object:
@@ -825,35 +862,6 @@ class SpectralLibraryAnalyser():
             srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
             srgb_cats = srgb_obj.colour_df['Category']
             title_sfx = f"sRGB vs. {title_sfx}"
-
-        # ***plot the colour matching functions or the instrument profiles***        
-
-        if 'sRGB' in title_sfx:
-            # get the cmfs
-            cmfs = colour.MSDS_CMFS['CIE 1931 2 Degree Standard Observer']
-            extrap_params = colour.SpectralShape(cfg.SAMPLE_RES['wvl_min'], 
-                                                 cfg.SAMPLE_RES['wvl_max'], 
-                                                 cfg.SAMPLE_RES['delta_wvl'])
-            profiles = cmfs.extrapolate(extrap_params).values
-            wvls = cmfs.extrapolate(extrap_params).wavelengths
-            labels = ['$\hat{x}$', '$\hat{y}$', '$\hat{z}$']
-        else:
-            # get the instrument profiles
-            # split the filter-ids from colour space
-            filter_ids = title_sfx.split('-')
-            trans_df = self.spectra_obj.instrument.get_trans_df()
-            profiles = trans_df.loc[filter_ids].to_numpy().transpose()
-            wvls = cfg.WVLS
-            labels = filter_ids
-                                
-        fig, ax = plt.subplots(1, 1, figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), dpi=cfg.DPI)
-        cols = ['r', 'g', 'b']
-        for profile in profiles.transpose():
-            ax.plot(wvls, profile, color=cols.pop(0), label=labels.pop(0), lw=0.8)
-        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
-        ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
-        ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
-        ax.set_title(title_sfx, fontsize=cfg.LABEL_S)
 
         # ***Make figure of colour of each entry, grouped by category***
  

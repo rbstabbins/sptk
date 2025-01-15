@@ -47,37 +47,6 @@ COLORCHECKER_SET = {
                         'white_9.5'])]
     }
 
-# COLORCHECKER_SET = {
-#     'natural': [('ColorChecker', 
-#                  ['dark_skin',
-#                   'light_skin',
-#                   'blue_sky',
-#                   'foliage',
-#                   'blue_flower',
-#                   'bluish_green'])],
-#     'colour': [('ColorChecker', 
-#                  ['orange',
-#                   'purplish_blue',
-#                   'moderate_red',
-#                   'purple',
-#                   'yellow_green',
-#                   'orange_yellow'])],
-#     'primary': [('ColorChecker', 
-#                  ['blue',
-#                   'green',
-#                   'red',
-#                   'yellow',
-#                   'magenta',
-#                   'cyan'])],
-#     'grayscale': [('ColorChecker', 
-#                  ['black',
-#                   'neutral_3.5',
-#                   'neutral_5',
-#                   'neutral_6.5',
-#                   'neutral_8',
-#                   'white'])]
-#     }
-
 # hematite at oxia planum
 OXIA_PLANUM_SET = {
     'hematite': [

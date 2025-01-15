@@ -20,9 +20,9 @@ dependencies:
   - tabulate
   - spectral
   - plotnine
-  - xgboost=0.72.1
-  - lightgbm=2.1.2
   - cvxopt
   - pip:
-      - pysptools=0.15.0
-      - spectral=0.21
+      - lightgbm
+      - pysptools==0.15.0
+      - spectral==0.21
+      - xgboost

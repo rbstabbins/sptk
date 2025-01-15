@@ -83,7 +83,8 @@ class SpectralLibraryAnalyser():
             scope: str='all',
             categories_only: bool=False,
             ci: bool=False,
-            hires_under: bool=False
+            hires_under: bool=False,
+            out_dir: Union[bool, str]=False
             ) -> plt.Axes:
         """Plot the profiles of the materials of the spectral library
         """
@@ -125,7 +126,8 @@ class SpectralLibraryAnalyser():
                             scope=scope,
                             with_noise=with_noise,
                             ci=ci,
-                            hires_under=hires_under)
+                            hires_under=hires_under,
+                            out_dir=out_dir)
                 axes.append(ax)
         
         # put all axes into a new figure
@@ -143,7 +145,8 @@ class SpectralLibraryAnalyser():
             ci: bool=False,
             scope: str='all',
             with_noise: bool=False,
-            hires_under: bool=False) -> None:
+            hires_under: bool=False,
+            out_dir: Union[bool, str]=False) -> None:
         """Method for producing the plot itself, according to given DataFrame,
         class, mineral name, and scope.
 
@@ -168,8 +171,11 @@ class SpectralLibraryAnalyser():
         # long form version of plotting, to aggregate data
         data_df =pd.melt(data_df, id_vars=['Data ID','Category'])
 
-        out_dir = Path(self.spectra_obj.object_dir / 'plots')
-        out_dir.mkdir(parents=True, exist_ok=True)
+        if out_dir:
+            out_dir = Path(out_dir)
+        else:
+            out_dir = Path(self.spectra_obj.object_dir / 'plots')
+            out_dir.mkdir(parents=True, exist_ok=True)
 
         if with_noise:
             sfx = '_with_noise'
@@ -226,8 +232,18 @@ class SpectralLibraryAnalyser():
         ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)')
         ax.set_ylabel('Reflectance')
-        # add minor grid lines at 50 nm intervals and major gridlines
-        ax.get_xaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
+        # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
+        # or minor at 100 and major at 500, depending on spectral range
+        spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
+        if spec_range <= 1000:
+            ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(50))
+            ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(100))
+        elif spec_range <= 5000:
+            ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(100))
+            ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(500))
+        else:
+            ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
+            ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
         ax.grid(True, which='major',axis='both', lw=0.6)
         ax.grid(True, which='minor',axis='both', lw=0.3)
 

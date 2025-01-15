@@ -887,13 +887,12 @@ class SpectralLibraryAnalyser():
         # load the spectral library        
         index = self.spectra_obj.main_df.index
 
-        self.spectra_obj.colour_df.columns[0][0]
         rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
         xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
 
         cats = self.spectra_obj.main_df['Category'][index]
         
-        title_sfx = "placeholder"
+        title_sfx = conditions
 
         # if compare, load the comparison material collection colour df
         if srgb_compare and self.obj_type == 'observation':
@@ -1066,21 +1065,25 @@ class SpectralLibraryAnalyser():
                 ax_c.set_title(str.capitalize(cat), fontsize=cfg.TITLE_S, y = 1.0, verticalalignment= 'bottom', pad=-cfg.TITLE_S)            
             fig.suptitle(f'{self.spectra_obj.spectral_library} '+title_sfx, fontsize=cfg.TITLE_S)
             fig.tight_layout()
+            #export as pdf
 
         # Plotting the RGB Cube
         # make a 3D plot of rgb array
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(rgb[:,0], rgb[:,1], rgb[:,2], c=rgb, s=100)
-        ax.set_xlabel('R')
-        ax.set_ylabel('G')
-        ax.set_zlabel('B')
+        ax.scatter(rgb[:,0], rgb[:,1], rgb[:,2], c=rgb, s=100, depthshade=True)
+        # ax.set_xlabel('R')
+        ax.tick_params(axis='x', colors='red')
+        # ax.set_ylabel('G')
+        ax.tick_params(axis='y', colors='green')
+        # ax.set_zlabel('B')
+        ax.tick_params(axis='z', colors='blue')
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
-        ax.set_zlim(0, 1)
+        ax.set_zlim(0, 1)        
         ax.set_title(f'{title_sfx} RGB Cube')
         fig.tight_layout()
-
+        # export as pdf
 
         # *** Plotting in chromaticity space ***
 

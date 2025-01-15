@@ -687,6 +687,23 @@ class SpectralLibraryAnalyser():
 
         return fig, ax
     
+    def plot_illuminant(self,
+                        illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
+                        ) -> Tuple[plt.figure, plt.Axes]:
+        """Plot the spectral power distribution of the given illuminant.
+
+        :param illuminant: Illuminant to plot, defaults to 'D65'
+        :type illuminant: str, optional
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.Axes]
+        """
+        # ***plot the illuminant profiles***
+        # get the illuminant
+        illum = colour.SDS_ILLUMINANTS[illuminant]
+        
+
+
+    
     def compute_colour(self,
                 illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
                 cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
@@ -759,19 +776,12 @@ class SpectralLibraryAnalyser():
         col_obj.main_df['a*'] = Lab[:,1]
         col_obj.main_df['b*'] = Lab[:,2]
 
-        # convert to Munsell
-        # have to loop over to catch bugs in conversion
-        Munsell = []
-        for this_xyY in xyY:
-            # edit this to handle graysclae patches
-            try:
-                this_munsell = colour.xyY_to_munsell_colour(this_xyY)
-            except:
-                this_munsell = np.nan
-            Munsell.append(this_munsell)
-
-        col_obj.main_df['Munsell'] = Munsell
-
+        # convert to LCh
+        LCh = colour.Lab_to_LCHab(Lab)
+        # col_obj.main_df['L*'] = LCh[:,0]
+        col_obj.main_df['C*'] = LCh[:,1]
+        col_obj.main_df['h'] = LCh[:,2]
+        
         # assign the new colour object df to the spectra object
         # collect the colour space columns under the cmf_label multiindex
         col_obj.main_df = col_obj.main_df.loc[:, 'Colour':]
@@ -781,7 +791,7 @@ class SpectralLibraryAnalyser():
 
         self.spectra_obj.colour_df = col_obj.main_df
 
-        return col_obj.main_df
+        return col_obj
 
     def compute_false_colour(self,
             filter_ids: Tuple[str, str, str]) -> object:
@@ -826,13 +836,26 @@ class SpectralLibraryAnalyser():
         false_col_obj.main_df['y'] = xyY[:,1]
         false_col_obj.main_df['Y'] = xyY[:,2]
 
+        # # convert to Lab
+        # Lab = colour.XYZ_to_Lab(XYZ, illum_ccs)
+
+        # col_obj.main_df['L*'] = Lab[:,0]
+        # col_obj.main_df['a*'] = Lab[:,1]
+        # col_obj.main_df['b*'] = Lab[:,2]
+
+        # # convert to LCh
+        # LCh = colour.Lab_to_LCHab(Lab)
+        # # col_obj.main_df['L*'] = LCh[:,0]
+        # col_obj.main_df['C*'] = LCh[:,1]
+        # col_obj.main_df['h'] = LCh[:,2]
+
         # add colour space information
         false_col_obj.main_df['Colour-Space'] = str.join('-', filter_ids)
 
         return false_col_obj
         
     def render_colour(self,
-            colour_obj: object,
+            conditions: str,
             srgb_compare: Union[bool, object]=False) -> plt.figure:
         """Render the colour of each spectrum in the spectral library according
         to the given computed colour coordinates.
@@ -846,14 +869,15 @@ class SpectralLibraryAnalyser():
         :rtype: pd.DataFrame, plt.figure
         """        
         # load the spectral library        
-        index = colour_obj.main_df.index
+        index = self.spectra_obj.main_df.index
 
-        rgb = colour_obj.main_df[['R', 'G', 'B']].to_numpy()
-        xyY = colour_obj.main_df[['x', 'y', 'Y']].to_numpy()
+        self.spectra_obj.colour_df.columns[0][0]
+        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+        xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
 
-        cats = colour_obj.main_df['Category'][index]
+        cats = self.spectra_obj.main_df['Category'][index]
         
-        title_sfx = f"{colour_obj.main_df['Colour-Space'][index].iloc[0]}"
+        title_sfx = "placeholder"
 
         # if compare, load the comparison material collection colour df
         if srgb_compare and self.obj_type == 'observation':
@@ -971,8 +995,8 @@ class SpectralLibraryAnalyser():
                 # get the index of the samples in this category    
                 i = page_cats[page][cat][0]
                 f = page_cats[page][cat][1]            
-                cat_df = colour_obj.main_df[colour_obj.main_df['Category'] == cat]
-                cat_rgb = cat_df[['R', 'G', 'B']].iloc[i:f+1]
+                cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]
+                cat_rgb = cat_df[conditions][['R', 'G', 'B']].iloc[i:f+1]
 
                 # get the index of the comparison samples in this category
                 if srgb_compare and self.obj_type == 'observation':
@@ -1006,7 +1030,7 @@ class SpectralLibraryAnalyser():
                     # annotate
                     # turn underscore into carriage return
                     # get mineral name
-                    min_name = colour_obj.main_df.loc[entry]['Mineral Name']
+                    min_name = self.spectra_obj.main_df.loc[entry]['Mineral Name']
                     entry = str(entry).replace('_', '\n')
                     entry = str(entry).replace(' ', '\n')
                     entry = entry.title() 

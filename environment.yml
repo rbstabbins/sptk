@@ -25,3 +25,4 @@ dependencies:
   - cvxopt
   - pip:
       - pysptools=0.15.0
+      - spectral=0.21

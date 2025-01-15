@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
+import spectral.io.envi as envi
 import sptk.config as cfg
 from sptk.instrument import Instrument
 from sptk.spectral_library_analyser import SpectralLibraryAnalyser
@@ -733,6 +734,87 @@ class MaterialCollection():
         if cfg.TIME_IT:
             toc = time.perf_counter()
             print(f"Material Collection exported in {toc - tic:0.4f} seconds.")
+
+    def export_main_df_2_envi(self,
+                              retain_dir_tree: bool=False):
+        """Export the dataframe to ENVI sli/hdr spectral library format.
+
+        :param retain_dir_tree: retain the directory tree structure of the
+            spectral library, defaults to False
+        :type retain_dir_tree: bool, optional
+        """
+        if cfg.TIME_IT:
+            tic = time.perf_counter()
+        print('Exporting the Material Collection to ENVI sli/hdr format...')
+        envi_lib_path = Path(self.object_dir / 'envi_sli')
+        envi_lib_path.mkdir(parents=True, exist_ok=True)
+
+        if retain_dir_tree:
+            # get list of mineral groups
+            categories = self.categories
+            for cat in categories:
+                # make a subdirectory
+                cat_path = Path(envi_lib_path / cat)
+                cat_path.mkdir(parents=True, exist_ok=True)
+                # get the subset of the dataframe
+                cat_df = self.get_subset_df(cat)
+                # for each mineral name in the category
+                mnrls = cat_df['Mineral Name'].unique()
+                for mnrl in mnrls:
+                    mnrl_path = Path(cat_path / mnrl)
+                    mnrl_path.mkdir(parents=True, exist_ok=True)
+                    refl_df = self.get_refl_df(category=cat,
+                                                            mineral_name=mnrl)
+                    cat_df = self.get_cat_df(category=cat,
+                                                            mineral_name=mnrl)
+                    cat_mnrl_df = pd.concat([refl_df, cat_df], axis=1)
+                    # mnrl_df = self.get_subset_df(cat, mnrl)
+
+                    # preparing the sli/hdr files
+                    header = {
+                        'wavelength': self.wvls,
+                        'fwhm:': np.empty(len(self.wvls)).fill(3.0), # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
+                        'spectra names': cat_mnrl_df.index.to_list(),
+                        'wavelength units': 'nm',
+                        'description': f'{cat} {mnrl} {self.spectral_library} reflectance data converted from ViSOR format',
+                    }
+                    
+                    spectra = self.get_refl_df(cat, mnrl).to_numpy()
+
+                    # write the sli/hdr files
+                    this_mnrl_sli = envi.SpectralLibrary(data=spectra, header=header)
+
+                    this_mnrl_sli.save(str(Path(mnrl_path, mnrl)))
+
+                    # upgrade - plot and save the library profiles alongside these.
+                    plotter = SpectralLibraryAnalyser(self)
+                    plotter.render_profile_plot(data_df=cat_mnrl_df, cat=cat, mnrl=mnrl, out_dir=mnrl_path)
+        else:
+            # export entire library to single sli file
+            header = {
+                'wavelength': self.wvls,
+                'fwhm:': np.empty(len(self.wvls)).fill(3.0), # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
+                'spectra names': self.main_df.index.to_list(),
+                'wavelength units': 'nm'
+            }
+            
+            spectra = self.get_refl_df().to_numpy()
+
+            # write the sli/hdr files
+            this_lib_sli = envi.SpectralLibrary(data=spectra, header=header)
+
+            this_lib_sli.save(str(envi_lib_path / self.spectral_library))
+
+            plotter = SpectralLibraryAnalyser(self)
+            refl_df = self.get_refl_df()                                                    
+            cat_df = self.get_cat_df()
+            cat_mnrl_df = pd.concat([refl_df, cat_df], axis=1)
+            plotter.render_profile_plot(data_df=cat_mnrl_df, out_dir=envi_lib_path)
+
+        if cfg.TIME_IT:
+            toc = time.perf_counter()
+            print(f"Material Collection exported in {toc - tic:0.4f} seconds.")
+
 
     def plot_profiles(self, categories_only: bool=False, ci: bool=False) -> plt.Axes:
         """Plot the profiles of the materials

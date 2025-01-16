@@ -869,7 +869,637 @@ class SpectralLibraryAnalyser():
         false_col_obj.main_df['Colour-Space'] = str.join('-', filter_ids)
 
         return false_col_obj
+    
+    def render_colour_contact_sheet(self,
+            conditions: str,
+            srgb_compare: Union[bool, object]=False
+            ) -> Tuple[plt.figure, plt.axes]:
+        """Render the colour of each entry in the spectral library according
+        to the given computed colour coordinates.
+        Arrange on A4 portrait sheets.
+
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :param srgb_compare: Indicate if sRGB comparison is to be made against 
+            the provided MaterialCollection (object), defaults to False
+        :type srgb_compare: Union[bool, object], optional
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
         
+        # # load the spectral library        
+        # index = self.spectra_obj.main_df.index
+
+        # rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()        
+
+        # cats = self.spectra_obj.main_df['Category'][index]
+        
+        # title_sfx = conditions
+
+        # # if compare, load the comparison material collection colour df
+        # if srgb_compare and self.obj_type == 'observation':
+        #     srgb_obj = srgb_compare.material_collection
+        #     srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
+        #     srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
+        #     srgb_cats = srgb_obj.colour_df['Category']
+        #     title_sfx = f"sRGB vs. {title_sfx}"
+
+        # ***Configure Page Layout(s) and Matplotlib Figure(s)***
+        # Parse through the complete spectral library to count
+        # the number of pages needed and the distribution of the categories
+        # and mineral groups over the columns and rows of each page.
+ 
+        title_sfx = conditions
+
+        # define page settings
+        N_rows = 8 # max number of rows allowed for 1 page  (1 fig)
+        N_cols = 6 # max number of columns allowed for 1 page (1 fig)
+        spacing = 1.0 # space in inches between rows and columns
+
+        # initiate category counter dicts
+        cat_ns = {}     # dict of entries in each category        
+        cat_cols = {}   # dict of columns needed for each category
+        cat_rows = {}   # dict of rows needed for each category
+        t_rows = 0 # counter of total number of rows needed for all categories
+
+        # populate category counters
+        index = self.spectra_obj.main_df.index
+        cats = self.spectra_obj.main_df['Category'][index]
+        for cat in cats.unique():
+            cat_n = len(cats[cats == cat]) # number of entries in given category
+            cat_ns[cat] = cat_n # dict lookup of # entries in category
+            if cat_n >= N_cols: # if there are more entries than columns...
+                cat_cols[cat] = N_cols  # ...set number of columns to N_cols
+                 # compute the number of rows needed given the fixed # columns
+                cat_rows[cat] = int(np.ceil(cat_n / N_cols))
+            else: # otherwise the number of columns is the number of entries
+                cat_cols[cat] = cat_n 
+                cat_rows[cat] = 1 # and the numebr of rows is 1                        
+            t_rows += cat_rows[cat] # running total of rows needed for all categories
+
+        N_pages = 1 + (t_rows-1) // N_rows # number of pages needed to plot all
+        
+        # Build a map of distribution of categories and entries across the pages
+        page_cats = {} # dict of pages with categories and entry indices
+        page = 0
+        cat_list = cats.unique().to_list()
+        cat = cat_list.pop()
+        cat_rows_left = cat_rows[cat]
+        i = 0 # initialise the first index of the category
+        f = 0 # initialise the last index of the category
+        page_cats[page] = {} # initialise the first page cat dictionary
+        page_rows = 0
+        
+        rows_used = 0  # count the used rows of the page
+        # if it hits N_rows, then move to next page
+        while rows_used < t_rows:  # stop when every row is rendered                     
+            if cat_rows_left + page_rows < N_rows: 
+                # if the rest of the category fits on the page,
+                # add the category to the page
+                f = i + cat_rows_left*N_cols - 1
+                page_cats[page][cat] = (i,f)
+                page_rows += cat_rows_left
+                rows_used += cat_rows_left
+                if f < i:                    
+                    raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
+                if len(cat_list) > 0:
+                    cat = cat_list.pop()
+                    cat_rows_left = cat_rows[cat]
+                    i = 0                
+            elif cat_rows_left + page_rows == N_rows: 
+                # if the rest of the category fills the page,
+                # add the category to the page
+                f = i + cat_rows_left*N_cols - 1
+                page_cats[page][cat] = (i,f)
+                page_rows += cat_rows_left
+                rows_used += cat_rows_left
+                if f < i:
+                    raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
+                if len(cat_list) > 0:
+                    cat = cat_list.pop()
+                    cat_rows_left = cat_rows[cat]
+                    i = 0
+                if rows_used < t_rows:
+                    page += 1
+                    page_rows = 0
+                    page_cats[page] = {}
+            elif cat_rows_left + page_rows > N_rows: 
+                # if the rest of the category does not fit on the page,
+                # only use rows up to total of N_rows
+                cat_r = N_rows - page_rows # the number of rows available
+                f = i + cat_r*N_cols - 1
+                cat_rows_left -= cat_r
+                rows_used += cat_r
+                page_rows += cat_r
+                page_cats[page][cat] = (i,f)
+                if f < i:
+                    raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
+                page += 1
+                page_rows = 0
+                page_cats[page] = {}
+                i = f + 1
+
+        # ***Render the Colour Contact Sheet according to the above mapping***
+        figs = []
+        axes = []
+        for page in np.arange(N_pages):
+            
+            # *** Formatting the page of the figure ***
+            
+            # get the categories on the page
+            cats_on_page = list(page_cats[page].keys())
+
+            # get the total number of rows used on the page
+            rows_used = 0
+            for cat in cats_on_page:    
+                page_cat_i = page_cats[page][cat][0]
+                page_cat_f = page_cats[page][cat][1]
+                cat_rows_used = int((page_cat_f - page_cat_i + 1) / N_cols)
+                rows_used += cat_rows_used
+            
+            # draw figure on page
+            fig = plt.figure(
+                figsize=(N_cols*spacing, rows_used*spacing), 
+                dpi=cfg.DPI, 
+                layout='compressed')
+            spec = fig.add_gridspec(rows_used,1) # use gridspec to handle multi-page plots
+
+            # *** Drawing the figure on the page ***
+
+            r = 0 # initialise the row counter
+            for c, cat in enumerate(cats_on_page):
+                
+                # use scatterplot to distribute entries evenly over the N_cols 
+                # and N_rows of the grid.
+
+                # get the index of the samples in this category    
+                i = page_cats[page][cat][0]
+                f = page_cats[page][cat][1]            
+                cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]
+                cat_rgb = cat_df[conditions][['R', 'G', 'B']].iloc[i:f+1]
+                
+                # get the number of rows used by this category
+                cat_r = int((f - i + 1) / N_cols)
+
+                # add a subplot for the category
+                ax_c = fig.add_subplot(spec[r:r+cat_r, :], adjustable='box')
+
+                r += cat_r
+
+                # get the index of the comparison samples in this category
+                if srgb_compare and self.obj_type == 'observation':
+                    srgb_obj = srgb_compare.material_collection
+                    srgb_cat_df = srgb_obj.colour_df[srgb_obj.colour_df['Category'] == cat]
+                    srgb_cat_rgb = srgb_cat_df[['R', 'G', 'B']].iloc[i:f+1]                
+
+                for i, entry in enumerate(cat_rgb.index):
+                    
+                    x = i % cat_cols[cat] + 0.5
+                    y = np.ceil(i // cat_cols[cat]) + 0.5
+
+                    if srgb_compare and self.obj_type == 'observation':
+                        srgb_col = srgb_cat_rgb.loc[entry].to_numpy()
+                        ax_c.scatter(x-0.15,y,
+                                        color=srgb_col,
+                                        s=200,
+                                        edgecolor='black')
+                        col = cat_rgb.loc[entry].to_numpy()
+                        ax_c.scatter(x+0.15,y,
+                                        color=col,
+                                        s=200,
+                                        edgecolor='black')
+                    else:
+                        col = cat_rgb.loc[entry].to_numpy()
+                        ax_c.scatter(x,y,
+                                        color=col,
+                                        s=200,
+                                        edgecolor='black')
+                    
+                    # annotate                                        
+                    min_name = self.spectra_obj.main_df.loc[entry]['Mineral Name']
+                    entry = str(entry).replace('_', '\n') # turn underscore into carriage return
+                    entry = str(entry).replace(' ', '\n') # get mineral name
+                    entry = entry.title() 
+                    entry = min_name.title() + '\n' + entry
+                    ax_c.annotate(entry, (x, y), 
+                                     (0,-1.5), 
+                                     textcoords='offset fontsize', 
+                                     fontsize=cfg.LEGEND_S, 
+                                     ha='center', va='top')
+                # remove the axes
+                ax_c.set_xlim(0, cat_cols[cat], auto=False)
+                ax_c.set_ylim(0, cat_r, auto=False)
+                ax_c.invert_yaxis()
+                ax_c.set_aspect('equal', adjustable='box', share=True)
+                ax_c.axis('off')
+                # set title
+                ax_c.set_title(str.capitalize(cat), 
+                               fontsize=cfg.TITLE_S, 
+                               y = 1.0, 
+                               verticalalignment= 'bottom', 
+                               pad=-cfg.TITLE_S)            
+            fig.suptitle(f'{self.spectra_obj.spectral_library} '+title_sfx, fontsize=cfg.TITLE_S)
+            fig.tight_layout()
+
+            # export page as pdf page
+            contact_sheet_dir=Path(self.project_dir,'contact_sheet')            
+            contact_sheet_dir.mkdir(parents=True, exist_ok=True)
+            filepath=Path(contact_sheet_dir, f'{self.spectra_obj.spectral_library} {conditions} page_{page}').with_suffix('.pdf') # locked as PDF not PNG
+            plt.savefig(filepath, bbox_inches='tight', pad_inches = 0.1)
+
+            figs.append(fig)
+            axes.append(ax_c)
+        
+        return figs, axes
+    
+    def render_rgb_cube(self,
+                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+        """Render the RGB cube of the spectral library for the given conditions.
+
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
+        title_sfx = conditions
+        
+        # load the spectral library
+        index = self.spectra_obj.main_df.index
+        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+
+        # make a 3D plot of rgb array
+        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax = fig.add_subplot(111, projection='3d')
+
+        # separately plot each catgeory with a different marker
+        cats = self.spectra_obj.main_df['Category'][index]
+        uniq_cats = cats.unique()
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
+                        'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+        for i, cat in enumerate(uniq_cats):
+            cat_rgb = rgb[cats == cat]
+            ax.scatter(cat_rgb[:,2], cat_rgb[:,0], cat_rgb[:,1], 
+                        c=cat_rgb, 
+                        depthshade=True, 
+                        marker=syms_list[i], 
+                        alpha=0.9,
+                        label=cat)
+        ax.set_xlabel('B', color='blue', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='x', colors='blue', labelsize=cfg.LEGEND_S)
+        ax.set_ylabel('R', color='red', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='y', colors='red', labelsize=cfg.LEGEND_S)
+        ax.set_zlabel('G', color='green', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='z', colors='green', labelsize=cfg.LEGEND_S)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(0, 1)       
+        ax.zaxis.labelpad=-3.5
+        ax.invert_yaxis()
+        ax.set_title(f'{title_sfx}\n RGB Cube', fontsize=cfg.LABEL_S)
+        fig.tight_layout()
+        # export as pdf   
+
+        return fig, ax
+    
+    def render_XYZ_cube(self,
+                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+        """Render the XYZ cube of the spectral library for the given conditions.
+
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
+        title_sfx = conditions
+        
+        # load the spectral library
+        index = self.spectra_obj.main_df.index
+        XYZ = self.spectra_obj.colour_df[conditions][['X', 'Y', 'Z']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+
+        # make a 3D plot of rgb array
+        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax = fig.add_subplot(111, projection='3d')
+
+        # separately plot each catgeory with a different marker
+        cats = self.spectra_obj.main_df['Category'][index]
+        uniq_cats = cats.unique()
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
+                        'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+        for i, cat in enumerate(uniq_cats):
+            cat_XYZ = XYZ[cats == cat]
+            cat_rgb = rgb[cats == cat]
+            ax.scatter(cat_XYZ[:,0], cat_XYZ[:,1], cat_XYZ[:,2], 
+                        c=cat_rgb, 
+                        depthshade=True, 
+                        marker=syms_list[i], 
+                        alpha=0.9,
+                        label=cat)
+        ax.set_xlabel('X', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
+        ax.set_ylabel('Y', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+        ax.set_zlabel('Z', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='z', labelsize=cfg.LEGEND_S)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(0, 1)   
+        ax.zaxis.labelpad=-3.5     
+        ax.invert_yaxis()
+        ax.set_title(f'{title_sfx}\n XYZ Cube', fontsize=cfg.LABEL_S)
+        fig.tight_layout()
+        # export as pdf    
+
+        return fig, ax
+    
+
+    def render_xyY_cube(self,
+                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+        """Render the xyY cube of the spectral library for the given conditions.
+
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
+        title_sfx = conditions
+        
+        # load the spectral library
+        index = self.spectra_obj.main_df.index
+        xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+
+        # make a 3D plot of rgb array
+        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax = fig.add_subplot(111, projection='3d')
+
+        # separately plot each catgeory with a different marker
+        cats = self.spectra_obj.main_df['Category'][index]
+        uniq_cats = cats.unique()
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
+                        'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+        for i, cat in enumerate(uniq_cats):
+            cat_xyY = xyY[cats == cat]
+            cat_rgb = rgb[cats == cat]
+            ax.scatter(cat_xyY[:,0], cat_xyY[:,1], cat_xyY[:,2], 
+                        c=cat_rgb, 
+                        depthshade=True, 
+                        marker=syms_list[i], 
+                        alpha=0.9,
+                        label=cat)
+        ax.set_xlabel('x', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
+        ax.set_ylabel('y', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+        ax.set_zlabel('Y', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='z', labelsize=cfg.LEGEND_S)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(0, 1)  
+        ax.zaxis.labelpad=-3.5      
+        ax.invert_yaxis()
+        ax.set_title(f'{title_sfx}\n xyY Cube', fontsize=cfg.LABEL_S)
+        fig.tight_layout()
+        # export as pdf    
+
+        return fig, ax
+
+    def render_xy_chromaticity_diagram(self,
+                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+        """Render the xy chromaticity diagram of the spectral library for 
+        the given conditions.
+
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
+
+        # *** Plotting in chromaticity space ***
+
+        title_sfx = conditions
+        
+        # load the spectral library
+        index = self.spectra_obj.main_df.index
+        xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+        
+        fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
+            cmfs=colour.MSDS_CMFS['CIE 1964 10 Degree Standard Observer'],
+            show=False, 
+            show_spectral_locus=True,
+            show_diagram_colours=True,
+            transparent_background=False,            
+            figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]),
+            dpi=cfg.DPI
+            )
+    
+        # set figure size
+        fig.set_size_inches(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+            
+        # separately plot each catgeory with a different marker
+        cats = self.spectra_obj.main_df['Category'][index]
+        # cat to integer
+        uniq_cats = cats.unique()
+        cat_codes = cats.astype('category').cat.codes
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 
+                     'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+
+        min_list = index.to_list()
+        for i, min in enumerate(min_list):
+           
+            sym = syms_list[cat_codes.loc[min]]
+            swatch_name = f"{min}".capitalize()
+                        
+            xy = xyY[i, 0:2]
+            x, y = xy
+            ax.plot(x, y, 
+                    f"{sym}", color=list(rgb[i]), 
+                    label=swatch_name, 
+                    markeredgewidth=0.5,
+                    markeredgecolor='white', markersize=4)
+        
+        # plot the sRGB space in the chromaticity diagram
+        sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
+        ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB')
+        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='') 
+
+        # if number of entries is >20, just add legend for categories, as a white symbol
+        handles, labels = ax.get_legend_handles_labels()
+
+        if len(labels) > 20:
+            labels = uniq_cats.categories.to_list()
+            # set the handle to the category symbol
+            handles = [mpl.lines.Line2D([0], [0], 
+                                color='w', markeredgecolor='k', 
+                                marker=syms_list[i], markersize=6, 
+                                label=uniq_cats.categories.to_list()[i]) for i in np.arange(len(uniq_cats))]
+
+        else:
+            # insert category labels into the legend        
+            for cat in uniq_cats:
+                cat_index = cats[cats == cat].index
+                cat_index = labels.index(cat_index[0])
+                labels.insert(cat_index, cat)
+                handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
+                                    color='w', marker='o', markersize=6, label=cat))
+        
+        ax.legend(handles, labels, loc='upper right', fontsize='x-small')
+                
+        # set figure size
+        fig.set_size_inches(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1])   
+        # set DPI
+        fig.set_dpi(cfg.DPI)
+
+        fig.tight_layout()      
+
+        return fig, ax
+
+    def render_Lab_cube(self,
+                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+        """Render the L*a*b* cube of the spectral library for the given conditions.
+
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
+        title_sfx = conditions
+        
+        # load the spectral library
+        index = self.spectra_obj.main_df.index
+        Lab = self.spectra_obj.colour_df[conditions][['L*', 'a*', 'b*']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+
+        # make a 3D plot of rgb array
+        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax = fig.add_subplot(111, projection='3d')
+
+        # separately plot each catgeory with a different marker
+        cats = self.spectra_obj.main_df['Category'][index]
+        uniq_cats = cats.unique()
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
+                        'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+        for i, cat in enumerate(uniq_cats):
+            cat_Lab = Lab[cats == cat]
+            cat_rgb = rgb[cats == cat]
+            ax.scatter(cat_Lab[:,1], cat_Lab[:,2], cat_Lab[:,0], 
+                        c=cat_rgb, 
+                        depthshade=True, 
+                        marker=syms_list[i], 
+                        alpha=0.9,
+                        label=cat)
+        ax.set_xlabel('a*', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
+        ax.set_ylabel('b*', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+        ax.set_zlabel('L*', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='z', labelsize=cfg.LEGEND_S)
+        ax.set_xlim(-100, 100)
+        ax.set_ylim(-100, 100)
+        ax.set_zlim(0, 100)  
+        ax.zaxis.labelpad=-3.5      
+        ax.invert_yaxis()
+        ax.set_title(f'{title_sfx}\n L*a*b* Cube', fontsize=cfg.LABEL_S)
+        fig.tight_layout()
+        # export as pdf    
+
+        # ab plot
+        fig_ab = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax_ab = fig_ab.add_subplot(111)
+
+        # add grid
+        ax_ab.set_axisbelow(True)
+        ax_ab.grid(True)
+
+        for i, cat in enumerate(uniq_cats):
+            cat_Lab = Lab[cats == cat]
+            cat_rgb = rgb[cats == cat]
+            ax_ab.scatter(cat_Lab[:,1], cat_Lab[:,2], 
+                        c=cat_rgb,
+                        marker=syms_list[i], label=cat)
+        ax_ab.set_xlabel('a*', fontsize=cfg.LEGEND_S)
+        ax_ab.tick_params(axis='x', labelsize=cfg.LEGEND_S)
+        ax_ab.set_ylabel('b*', fontsize=cfg.LEGEND_S)
+        ax_ab.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+        ax_ab.set_xlim(-100, 100)
+        ax_ab.set_ylim(-100, 100)
+        ax_ab.set_title(f'{title_sfx} Lab ab Plane', fontsize=cfg.LABEL_S)
+        fig_ab.tight_layout()        
+        # export as pdf
+
+        return fig, ax
+
+    def render_LChab_cube(self,
+                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+        """Render the L*C*h(ab) cube of the spectral library for the given conditions.
+
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
+        title_sfx = conditions
+        
+        # load the spectral library
+        index = self.spectra_obj.main_df.index
+        LCh = self.spectra_obj.colour_df[conditions][['L*', 'C*', 'h']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+
+        # make a 3D plot of rgb array
+        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax = fig.add_subplot(111, projection='3d')
+
+        # separately plot each catgeory with a different marker
+        cats = self.spectra_obj.main_df['Category'][index]
+        uniq_cats = cats.unique()
+        syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
+                        'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+        for i, cat in enumerate(uniq_cats):
+            cat_LCh = LCh[cats == cat]
+            cat_rgb = rgb[cats == cat]
+            ax.scatter(cat_LCh[:,1], cat_LCh[:,2], cat_LCh[:,0], 
+                        c=cat_rgb, 
+                        depthshade=True, 
+                        marker=syms_list[i], 
+                        alpha=0.9,
+                        label=cat)
+        ax.set_xlabel('C*', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
+        ax.set_ylabel('h*', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+        ax.set_zlabel('L*', fontsize=cfg.LEGEND_S)
+        ax.tick_params(axis='z', labelsize=cfg.LEGEND_S)
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 360)
+        ax.set_zlim(0, 100)  
+        ax.zaxis.labelpad=-3.5      
+        ax.invert_yaxis()
+        ax.set_title(f'{title_sfx}\n L*a*b* Cube', fontsize=cfg.LABEL_S)
+        fig.tight_layout()
+        # export as pdf    
+
+        # Ch plot
+        fig_ab = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax_ab = fig_ab.add_subplot(111, projection='polar')
+
+        # add grid
+        ax_ab.set_axisbelow(True)
+        ax_ab.grid(True)        
+
+        for i, cat in enumerate(uniq_cats):
+            cat_LCh = LCh[cats == cat]
+            cat_rgb = rgb[cats == cat]
+            ax_ab.scatter(np.deg2rad(cat_LCh[:,2]), cat_LCh[:,1], 
+                        c=cat_rgb,
+                        marker=syms_list[i], label=cat)
+            ax_ab.set_rmax(100)        
+        ax_ab.set_title(fr"{title_sfx}""\n LCh Chroma "rf"($r$) hue ($\theta$) Plane", fontsize=cfg.LABEL_S)
+        fig_ab.tight_layout()        
+        # export as pdf
+
+        return fig, ax
+
     def render_colour(self,
             conditions: str,
             srgb_compare: Union[bool, object]=False) -> plt.figure:
@@ -901,171 +1531,6 @@ class SpectralLibraryAnalyser():
             srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
             srgb_cats = srgb_obj.colour_df['Category']
             title_sfx = f"sRGB vs. {title_sfx}"
-
-        # ***Make figure of colour of each entry, grouped by category***
- 
-        # define page settings
-        N_rows = 8 # max number of rows allowed for 1 page / 1 fig
-        N_cols = 6 # max number of columns allowed for 1 page / 1 fig        
-        spacing = 1.0 # space in inches between rows and columns
-
-        # initiate category counter dicts
-        cat_ns = {}     # dict of entries in each category        
-        cat_cols = {}   # dict of columns needed for each category
-        cat_rows = {}   # dict of rows needed for each category
-        t_rows = 0 # counter of total number of rows needed for all categories
-
-        # populate category counters
-        for cat in cats.unique():
-            cat_n = len(cats[cats == cat]) # number of entries in given category
-            cat_ns[cat] = cat_n # dict lookup of # entries in category
-            if cat_n >= N_cols: # if there are more entries than columns...
-                cat_cols[cat] = N_cols  # ...set number of columns to N_cols
-                cat_rows[cat] = int(np.ceil(cat_n / N_cols)) # compute the number of rows needed given the fixed # columns
-            else:
-                cat_cols[cat] = cat_n # otherwise the number of columns is the number of entries
-                cat_rows[cat] = 1 # and the numebr of rows is 1                        
-            t_rows += cat_rows[cat] # running total of rows needed for all categories
-
-        N_pages = 1 + (t_rows-1) // N_rows # number of pages needed to plot all sites
-        page_cats = {}
-
-        # populate page slices
-        page = 0
-        cat_list = cats.unique().to_list()
-        cat = cat_list.pop()
-        cat_rows_left = cat_rows[cat]
-        rows_used = 0
-        i = 0
-        f = 0
-        page_cats[page] = {}
-        # need to count the rows used up of the page...if it hits N_rows, then move to next page
-        page_rows = 0        
-        while rows_used < t_rows:   # until every row of the library is rendered...                     
-            if cat_rows_left + page_rows < N_rows: # if the rest of the category fits on the page...
-                # add the category to the page
-                f = i + cat_rows_left*N_cols - 1
-                page_cats[page][cat] = (i,f)
-                page_rows += cat_rows_left
-                rows_used += cat_rows_left
-                if f < i:
-                    print('stop')
-                if len(cat_list) > 0:
-                    cat = cat_list.pop()
-                    cat_rows_left = cat_rows[cat]
-                    i = 0                
-            elif cat_rows_left + page_rows == N_rows: # if the rest of the category fills the page...
-                # add the category to the page
-                f = i + cat_rows_left*N_cols - 1
-                page_cats[page][cat] = (i,f)
-                page_rows += cat_rows_left
-                rows_used += cat_rows_left
-                if f < i:
-                    print('stop')
-                if len(cat_list) > 0:
-                    cat = cat_list.pop()
-                    cat_rows_left = cat_rows[cat]
-                    i = 0
-                if rows_used < t_rows:
-                    page += 1
-                    page_rows = 0
-                    page_cats[page] = {}
-            elif cat_rows_left + page_rows > N_rows: # if the rest of the category does not fit on the page...
-                # only use rows up to total of N_rows
-                cat_r = N_rows - page_rows # the number of rows available
-                f = i + cat_r*N_cols - 1
-                cat_rows_left -= cat_r
-                rows_used += cat_r
-                page_rows += cat_r
-                page_cats[page][cat] = (i,f)
-                if f < i:
-                    print('stop')
-                page += 1
-                page_rows = 0
-                page_cats[page] = {}
-                i = f + 1
-
-        for page in np.arange(N_pages):
-            # get the categories on the page
-            cats_on_page = list(page_cats[page].keys())
-            # get the total number of rows used
-            rows_used = 0
-            for cat in cats_on_page:                
-                rows_used += int((page_cats[page][cat][1] - page_cats[page][cat][0] + 1) / N_cols)
-            
-            # draw figure on page
-            fig = plt.figure(figsize=(N_cols*spacing, rows_used*spacing), dpi=cfg.DPI, layout='compressed')
-            spec = fig.add_gridspec(rows_used,1)
-
-            r = 0
-            for c, cat in enumerate(cats_on_page):
-                # scatterplot points evenly over the N_cols and N_rows of the grid.
-
-                # get the number of rows used by this category
-                cat_r = int((page_cats[page][cat][1] - page_cats[page][cat][0] + 1) / N_cols)
-                ax_c = fig.add_subplot(spec[r:r+cat_r, :], adjustable='box')
-
-                r += cat_r
-
-                # get the index of the samples in this category    
-                i = page_cats[page][cat][0]
-                f = page_cats[page][cat][1]            
-                cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]
-                cat_rgb = cat_df[conditions][['R', 'G', 'B']].iloc[i:f+1]
-
-                # get the index of the comparison samples in this category
-                if srgb_compare and self.obj_type == 'observation':
-                    srgb_obj = srgb_compare.material_collection
-                    srgb_cat_df = srgb_obj.colour_df[srgb_obj.colour_df['Category'] == cat]
-                    srgb_cat_rgb = srgb_cat_df[['R', 'G', 'B']].iloc[i:f+1]                
-
-                for i, entry in enumerate(cat_rgb.index):
-                    
-                    x = i % cat_cols[cat] + 0.5
-                    y = np.ceil(i // cat_cols[cat]) + 0.5
-
-                    if srgb_compare and self.obj_type == 'observation':
-                        srgb_col = srgb_cat_rgb.loc[entry].to_numpy()
-                        ax_c.scatter(x-0.15,y,
-                                        color=srgb_col,
-                                        s=200,
-                                        edgecolor='black')
-                        col = cat_rgb.loc[entry].to_numpy()
-                        ax_c.scatter(x+0.15,y,
-                                        color=col,
-                                        s=200,
-                                        edgecolor='black')
-                    else:
-                        col = cat_rgb.loc[entry].to_numpy()
-                        ax_c.scatter(x,y,
-                                        color=col,
-                                        s=200,
-                                        edgecolor='black')
-                    
-                    # annotate
-                    # turn underscore into carriage return
-                    # get mineral name
-                    min_name = self.spectra_obj.main_df.loc[entry]['Mineral Name']
-                    entry = str(entry).replace('_', '\n')
-                    entry = str(entry).replace(' ', '\n')
-                    entry = entry.title() 
-                    entry = min_name.title() + '\n' + entry
-                    ax_c.annotate(entry, (x, y), 
-                                     (0,-1.5), 
-                                     textcoords='offset fontsize', 
-                                     fontsize=cfg.LEGEND_S, 
-                                     ha='center', va='top')
-                # remove the axes
-                ax_c.set_xlim(0, cat_cols[cat], auto=False)
-                ax_c.set_ylim(0, cat_r, auto=False)
-                ax_c.invert_yaxis()
-                ax_c.set_aspect('equal', adjustable='box', share=True)
-                ax_c.axis('off')
-                # set title
-                ax_c.set_title(str.capitalize(cat), fontsize=cfg.TITLE_S, y = 1.0, verticalalignment= 'bottom', pad=-cfg.TITLE_S)            
-            fig.suptitle(f'{self.spectra_obj.spectral_library} '+title_sfx, fontsize=cfg.TITLE_S)
-            fig.tight_layout()
-            #export as pdf
 
         # Plotting the RGB Cube
         # make a 3D plot of rgb array

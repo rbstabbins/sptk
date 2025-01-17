@@ -704,7 +704,7 @@ class SpectralLibraryAnalyser():
         return fig, ax
     
     def plot_illuminant(self,
-                        illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
+            illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
                         ) -> Tuple[plt.figure, plt.Axes]:
         """Plot the spectral power distribution of the given illuminant.
 
@@ -716,10 +716,15 @@ class SpectralLibraryAnalyser():
         # ***plot the illuminant profiles***
         # get the illuminant
         illum = colour.SDS_ILLUMINANTS[illuminant]
+
+        fig, ax = plt.subplots(1, 1, figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), dpi=cfg.DPI)
+        ax.plot(illum.wavelengths, illum.values, lw=0.8)
+        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
+        ax.set_ylabel('Spectral Power Distribution', fontsize=cfg.LABEL_S)
+        ax.set_title(illuminant, fontsize=cfg.LABEL_S)
+
+        return fig, ax
         
-
-
-    
     def compute_colour(self,
                 illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
                 cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
@@ -810,7 +815,8 @@ class SpectralLibraryAnalyser():
         return col_obj
 
     def compute_false_colour(self,
-            filter_ids: Tuple[str, str, str]) -> object:
+            filter_ids: Tuple[str, str, str],
+            illuminant: str=None) -> object:
         """Compute the false colour of each entry in the given Observation for
         the given instrument filter IDs.
 
@@ -819,6 +825,8 @@ class SpectralLibraryAnalyser():
         :return: Observation duplicate of false colours for each entry
         :rtype: Observation
         """
+
+        filter_labels= filter_ids[0]+'-'+filter_ids[1]+'-'+filter_ids[2]
         # deep copy the spectra object
         false_col_obj = copy.deepcopy(self.spectra_obj)
 
@@ -828,7 +836,7 @@ class SpectralLibraryAnalyser():
         cwls = inst_info.loc[filter_ids].cwl.to_list()
         refl_df = self.spectra_obj.get_refl_df()
         rgb = refl_df[cwls].to_numpy()
-        rgb = np.clip(rgb, 0, 1) * 255
+        rgb = np.clip(rgb, 0, 1)
 
         # set the RGB values for the false colours
         false_col_obj.main_df.drop(self.wvls, axis=1, inplace=True)
@@ -837,7 +845,7 @@ class SpectralLibraryAnalyser():
         false_col_obj.main_df['G'] = rgb[:,1]
         false_col_obj.main_df['B'] = rgb[:,2]
         
-        # convert RGB to XYZ and add to object
+        # convert RGB back to XYZ and add to object
         XYZ = colour.RGB_to_XYZ(rgb, 'sRGB')
 
         # append the XYZ values to the new colour df
@@ -852,21 +860,33 @@ class SpectralLibraryAnalyser():
         false_col_obj.main_df['y'] = xyY[:,1]
         false_col_obj.main_df['Y'] = xyY[:,2]
 
-        # # convert to Lab
-        # Lab = colour.XYZ_to_Lab(XYZ, illum_ccs)
+        # convert to Lab
+        Lab = colour.XYZ_to_Lab(XYZ)
 
-        # col_obj.main_df['L*'] = Lab[:,0]
-        # col_obj.main_df['a*'] = Lab[:,1]
-        # col_obj.main_df['b*'] = Lab[:,2]
+        false_col_obj.main_df['L*'] = Lab[:,0]
+        false_col_obj.main_df['a*'] = Lab[:,1]
+        false_col_obj.main_df['b*'] = Lab[:,2]
 
-        # # convert to LCh
-        # LCh = colour.Lab_to_LCHab(Lab)
-        # # col_obj.main_df['L*'] = LCh[:,0]
-        # col_obj.main_df['C*'] = LCh[:,1]
-        # col_obj.main_df['h'] = LCh[:,2]
+        # convert to LCh
+        LCh = colour.Lab_to_LCHab(Lab)
+        # col_obj.main_df['L*'] = LCh[:,0]
+        false_col_obj.main_df['C*'] = LCh[:,1]
+        false_col_obj.main_df['h'] = LCh[:,2]
 
-        # add colour space information
-        false_col_obj.main_df['Colour-Space'] = str.join('-', filter_ids)
+        # assign the new colour object df to the spectra object
+        # collect the colour space columns under the cmf_label multiindex
+        false_col_obj.main_df = false_col_obj.main_df.loc[:, 'Colour':]
+        # drop 'Colour' column
+        false_col_obj.main_df.drop('Colour', axis=1, inplace=True)        
+        false_col_obj.main_df.columns = pd.MultiIndex.from_product([[filter_labels], false_col_obj.main_df.columns])
+
+        # if colour_df exists, append this df
+        if hasattr(self.spectra_obj, 'colour_df'):    
+            levels = self.spectra_obj.colour_df.columns.get_level_values(0).unique()
+            if filter_labels not in levels:
+                self.spectra_obj.colour_df = pd.concat([self.spectra_obj.colour_df, false_col_obj.main_df], axis=1)
+        else:
+            self.spectra_obj.colour_df = false_col_obj.main_df
 
         return false_col_obj
     
@@ -1138,7 +1158,8 @@ class SpectralLibraryAnalyser():
                         'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
         for i, cat in enumerate(uniq_cats):
             cat_rgb = rgb[cats == cat]
-            ax.scatter(cat_rgb[:,2], cat_rgb[:,0], cat_rgb[:,1], 
+            # plot each point in turn to give separate colour
+            ax.scatter(cat_rgb[:,0], cat_rgb[:,1], cat_rgb[:,2], 
                         c=cat_rgb, 
                         depthshade=True, 
                         marker=syms_list[i], 
@@ -1241,12 +1262,12 @@ class SpectralLibraryAnalyser():
         for i, cat in enumerate(uniq_cats):
             cat_xyY = xyY[cats == cat]
             cat_rgb = rgb[cats == cat]
-            ax.scatter(cat_xyY[:,0], cat_xyY[:,1], cat_xyY[:,2], 
-                        c=cat_rgb, 
-                        depthshade=True, 
-                        marker=syms_list[i], 
-                        alpha=0.9,
-                        label=cat)
+            for e in range(cat_xyY.shape[0]):
+                markerline, stemlines, baseline = ax.stem([cat_xyY[e,0]], [cat_xyY[e,1]], [cat_xyY[e,2]], label=cat, markerfmt=syms_list[i])                
+                markerline.set_markerfacecolor(cat_rgb[e,:])
+                markerline.set_markeredgecolor(cat_rgb[e,:])
+                stemlines.set_color(cat_rgb[e,:])                
+                baseline.set_color(cat_rgb[e,:])
         ax.set_xlabel('x', fontsize=cfg.LEGEND_S)
         ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
         ax.set_ylabel('y', fontsize=cfg.LEGEND_S)
@@ -1257,7 +1278,7 @@ class SpectralLibraryAnalyser():
         ax.set_ylim(0, 1)
         ax.set_zlim(0, 1)  
         ax.zaxis.labelpad=-3.5      
-        ax.invert_yaxis()
+        # ax.invert_yaxis()
         ax.set_title(f'{title_sfx}\n xyY Cube', fontsize=cfg.LABEL_S)
         fig.tight_layout()
         # export as pdf    
@@ -1383,6 +1404,12 @@ class SpectralLibraryAnalyser():
         for i, cat in enumerate(uniq_cats):
             cat_Lab = Lab[cats == cat]
             cat_rgb = rgb[cats == cat]
+            for e in range(cat_Lab.shape[0]):
+                markerline, stemlines, baseline = ax.stem([cat_Lab[e,1]], [cat_Lab[e,2]], [cat_Lab[e,0]], label=cat, markerfmt=syms_list[i])                
+                markerline.set_markerfacecolor(cat_rgb[e,:])
+                markerline.set_markeredgecolor(cat_rgb[e,:])
+                stemlines.set_color(cat_rgb[e,:])                
+                baseline.set_color(cat_rgb[e,:])
             ax.scatter(cat_Lab[:,1], cat_Lab[:,2], cat_Lab[:,0], 
                         c=cat_rgb, 
                         depthshade=True, 
@@ -1398,8 +1425,7 @@ class SpectralLibraryAnalyser():
         ax.set_xlim(-100, 100)
         ax.set_ylim(-100, 100)
         ax.set_zlim(0, 100)  
-        ax.zaxis.labelpad=-3.5      
-        ax.invert_yaxis()
+        ax.zaxis.labelpad=-3.5              
         ax.set_title(f'{title_sfx}\n L*a*b* Cube', fontsize=cfg.LABEL_S)
         fig.tight_layout()
         # export as pdf    
@@ -1430,9 +1456,11 @@ class SpectralLibraryAnalyser():
 
         return fig, ax
 
-    def render_LChab_cube(self,
+    def render_Chab_plane(self,
                         conditions: str) -> Tuple[plt.figure, plt.axes]:
-        """Render the L*C*h(ab) cube of the spectral library for the given conditions.
+        """Render the C*h(ab) plane of the spectral library for the given conditions.
+        Note that no method is available AFAIK for rendring a polar cyclindrical
+        plot of the LCh space. So only plotting 2D C*h polar plane.
 
         :param conditions: Conditions used in the colour computation
         :type conditions: str
@@ -1446,56 +1474,61 @@ class SpectralLibraryAnalyser():
         LCh = self.spectra_obj.colour_df[conditions][['L*', 'C*', 'h']].to_numpy()
         rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
 
-        # make a 3D plot of rgb array
-        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        ax = fig.add_subplot(111, projection='3d')
 
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
         uniq_cats = cats.unique()
         syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
                         'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
-        for i, cat in enumerate(uniq_cats):
-            cat_LCh = LCh[cats == cat]
-            cat_rgb = rgb[cats == cat]
-            ax.scatter(cat_LCh[:,1], cat_LCh[:,2], cat_LCh[:,0], 
-                        c=cat_rgb, 
-                        depthshade=True, 
-                        marker=syms_list[i], 
-                        alpha=0.9,
-                        label=cat)
-        ax.set_xlabel('C*', fontsize=cfg.LEGEND_S)
-        ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
-        ax.set_ylabel('h*', fontsize=cfg.LEGEND_S)
-        ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
-        ax.set_zlabel('L*', fontsize=cfg.LEGEND_S)
-        ax.tick_params(axis='z', labelsize=cfg.LEGEND_S)
-        ax.set_xlim(0, 100)
-        ax.set_ylim(0, 360)
-        ax.set_zlim(0, 100)  
-        ax.zaxis.labelpad=-3.5      
-        ax.invert_yaxis()
-        ax.set_title(f'{title_sfx}\n L*a*b* Cube', fontsize=cfg.LABEL_S)
-        fig.tight_layout()
-        # export as pdf    
+        
+        # Disable LCh cube plot - cannot plot polar cylindrical
+        # # make a 3D plot of rgb array
+        # fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        # ax = fig.add_subplot(111, projection='3d')
+        # for i, cat in enumerate(uniq_cats):
+        #     cat_LCh = LCh[cats == cat]
+        #     cat_rgb = rgb[cats == cat]
+        #     ax.scatter(cat_LCh[:,1], cat_LCh[:,2], cat_LCh[:,0], 
+        #                 c=cat_rgb, 
+        #                 depthshade=True, 
+        #                 marker=syms_list[i], 
+        #                 alpha=0.9,
+        #                 label=cat)
+        # ax.set_xlabel('C*', fontsize=cfg.LEGEND_S)
+        # ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
+        # ax.set_ylabel('h*', fontsize=cfg.LEGEND_S)
+        # ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+        # ax.set_zlabel('L*', fontsize=cfg.LEGEND_S)
+        # ax.tick_params(axis='z', labelsize=cfg.LEGEND_S)
+        # ax.set_xlim(0, 100)
+        # ax.set_ylim(0, 360)
+        # ax.set_zlim(0, 100)  
+        # ax.zaxis.labelpad=-3.5      
+        # ax.invert_yaxis()
+        # ax.set_title(f'{title_sfx}\n L*a*b* Cube', fontsize=cfg.LABEL_S)
+        # fig.tight_layout()
+        # # export as pdf    
 
         # Ch plot
-        fig_ab = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        ax_ab = fig_ab.add_subplot(111, projection='polar')
+        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        ax = fig.add_subplot(111, projection='polar')
 
         # add grid
-        ax_ab.set_axisbelow(True)
-        ax_ab.grid(True)        
+        ax.set_axisbelow(True)
+        ax.grid(True)        
 
         for i, cat in enumerate(uniq_cats):
             cat_LCh = LCh[cats == cat]
             cat_rgb = rgb[cats == cat]
-            ax_ab.scatter(np.deg2rad(cat_LCh[:,2]), cat_LCh[:,1], 
+            ax.scatter(np.deg2rad(cat_LCh[:,2]), cat_LCh[:,1], 
                         c=cat_rgb,
                         marker=syms_list[i], label=cat)
-            ax_ab.set_rmax(100)        
-        ax_ab.set_title(fr"{title_sfx}""\n LCh Chroma "rf"($r$) hue ($\theta$) Plane", fontsize=cfg.LABEL_S)
-        fig_ab.tight_layout()        
+            ax.set_rmax(100)  
+            # set radial axis font size
+            ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
+            ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+        ax.set_title(fr"{title_sfx}""\n LCh Chroma "rf"($r$) hue ($\theta$) Plane", fontsize=cfg.LABEL_S)
+        fig.tight_layout()        
         # export as pdf
 
         return fig, ax

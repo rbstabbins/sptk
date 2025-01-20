@@ -13,7 +13,7 @@ from ast import literal_eval
 import copy
 import os
 import time
-from typing import Literal, Tuple, Union
+from typing import Literal, Tuple, Union, List
 import colour
 import pandas as pd
 import matplotlib as mpl
@@ -670,18 +670,50 @@ class SpectralLibraryAnalyser():
     # Colour Processing & Rendering
     # """
 
+    def plot_filter_ids(self, 
+            filter_ids: Tuple[str, str, str],
+            ) -> Tuple[plt.figure, plt.Axes]:
+        """Plot the filter ids used for the false colour rendering.
+
+        :param filter_ids: List of filter ids to plot
+        :type filter_ids: List[str, str, str]        
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.Axes]
+        """
+        # ***plot the instrument profiles***        
+
+        # get the filters
+        transmission = self.spectra_obj.instrument.get_trans_df()
+        wvls = self.spectra_obj.instrument.wvls
+
+        title = filter_ids[0] + ' ' + filter_ids[1] + ' ' + filter_ids[2]
+
+        fig, ax = plt.subplots(1, 1, 
+                               figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), 
+                               dpi=cfg.DPI)
+        cols = ['r', 'g', 'b']
+        for filt in filter_ids:
+            normed_filter_profile = transmission.loc[filt].to_numpy() / transmission.loc[filt].max()
+            ax.plot(wvls, normed_filter_profile, color=cols.pop(0), label=filt, lw=0.8)
+        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
+        ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
+        ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
+        ax.set_title(title, fontsize=cfg.LABEL_S)
+
+        return fig, ax
+
     def plot_cmfs(self, 
             cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
             ) -> Tuple[plt.figure, plt.Axes]:
         """Plot the colour matching functions for the given observer.
 
         :param cmf_label: Label of the colour matching functions, 
-                            defaults to 'CIE 1931 2 Degree Standard Observer'
+                            defaults to 'CIE 1964 10 Degree Standard Observer'
         :type cmf_label: str, optional
         :return: Figure and Axes of the plot
         :rtype: Tuple[plt.figure, plt.Axes]
         """
-        # ***plot the colour matching functions or the instrument profiles***        
+        # ***plot the colour matching functions ***        
 
         # get the cmfs
         cmfs = colour.MSDS_CMFS[cmf_label]
@@ -808,7 +840,11 @@ class SpectralLibraryAnalyser():
         col_obj.main_df = col_obj.main_df.loc[:, 'Colour':]
         # drop 'Colour' column
         col_obj.main_df.drop('Colour', axis=1, inplace=True)
-        col_obj.main_df.columns = pd.MultiIndex.from_product([[cmf_label+' '+illuminant], col_obj.main_df.columns])
+        if self.obj_type == 'observation':
+            colour_conditions = cmf_label+' '+illuminant+' '+self.spectra_obj.instrument.name
+        else:
+            colour_conditions = cmf_label+' '+illuminant
+        col_obj.main_df.columns = pd.MultiIndex.from_product([[colour_conditions], col_obj.main_df.columns])
 
         self.spectra_obj.colour_df = col_obj.main_df
 
@@ -915,21 +951,21 @@ class SpectralLibraryAnalyser():
         # cats = self.spectra_obj.main_df['Category'][index]
         
         # title_sfx = conditions
-
-        # # if compare, load the comparison material collection colour df
-        # if srgb_compare and self.obj_type == 'observation':
-        #     srgb_obj = srgb_compare.material_collection
-        #     srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
-        #     srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
-        #     srgb_cats = srgb_obj.colour_df['Category']
-        #     title_sfx = f"sRGB vs. {title_sfx}"
+        title_sfx = conditions
+        
+        # if compare, load the comparison material collection colour df
+        if srgb_compare and self.obj_type == 'observation':
+            srgb_obj = srgb_compare.material_collection
+            srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
+            srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
+            srgb_cats = srgb_obj.colour_df['Category']
+            title_sfx = f"sRGB vs. {title_sfx}"
 
         # ***Configure Page Layout(s) and Matplotlib Figure(s)***
         # Parse through the complete spectral library to count
         # the number of pages needed and the distribution of the categories
         # and mineral groups over the columns and rows of each page.
  
-        title_sfx = conditions
 
         # define page settings
         N_rows = 8 # max number of rows allowed for 1 page  (1 fig)

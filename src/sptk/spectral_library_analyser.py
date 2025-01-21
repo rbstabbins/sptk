@@ -795,6 +795,10 @@ class SpectralLibraryAnalyser():
         cmfs=colour.colorimetry.MSDS_CMFS[cmf_label]
 
         # convert from spectra to XYZ tristimulus values
+        # Note: if spectral range of observed (instrument) data is inside the
+        # range of the cmfs, then the observed spectra will be extrapolated
+        # in accordance with CIE 15:2004 and CIE 167:2005, i.e. by assuming that
+        # all values out of the range have the same value as the nearest value.
         xyz = colour.sd_to_XYZ(
                                 sds, 
                                 cmfs=cmfs,
@@ -861,6 +865,12 @@ class SpectralLibraryAnalyser():
         :return: Observation duplicate of false colours for each entry
         :rtype: Observation
         """
+        # special case for CaSSIS synthetic RGB image:
+        compute_sBLU = False
+        if 'sBLU' in filter_ids:
+            filter_ids.remove('sBLU')
+            filter_ids.append('BLU')
+            compute_sBLU = True 
 
         filter_labels= filter_ids[0]+'-'+filter_ids[1]+'-'+filter_ids[2]
         # deep copy the spectra object
@@ -873,6 +883,14 @@ class SpectralLibraryAnalyser():
         refl_df = self.spectra_obj.get_refl_df()
         rgb = refl_df[cwls].to_numpy()
         rgb = np.clip(rgb, 0, 1)
+
+        if compute_sBLU:
+            rgb[:,2] = 2*rgb[:,0] - 0.3*rgb[:,1]
+            filter_ids.remove('BLU')
+            filter_ids.append('sBLU')
+        rgb = np.clip(rgb, 0, 1)
+        filter_labels= filter_ids[0]+'-'+filter_ids[1]+'-'+filter_ids[2]
+
 
         # set the RGB values for the false colours
         false_col_obj.main_df.drop(self.wvls, axis=1, inplace=True)

@@ -13,7 +13,7 @@ from ast import literal_eval
 import copy
 import os
 import time
-from typing import Literal, Tuple, Union, List
+from typing import Literal, Tuple, Union, List, Dict
 import colour
 import pandas as pd
 import matplotlib as mpl
@@ -672,6 +672,7 @@ class SpectralLibraryAnalyser():
 
     def plot_filter_ids(self, 
             filter_ids: Tuple[str, str, str],
+            ax: plt.Axes=None
             ) -> Tuple[plt.figure, plt.Axes]:
         """Plot the filter ids used for the false colour rendering.
 
@@ -688,9 +689,20 @@ class SpectralLibraryAnalyser():
 
         title = filter_ids[0] + ' ' + filter_ids[1] + ' ' + filter_ids[2]
 
-        fig, ax = plt.subplots(1, 1, 
-                               figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), 
-                               dpi=cfg.DPI)
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, 
+                                figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), 
+                                dpi=cfg.DPI)
+        else:
+            fig = ax.get_figure()
+
+        # handle CaSSIS synthetic BLU
+        compute_sBLU = False
+        if 'sBLU' in filter_ids:
+            filter_ids.remove('sBLU')
+            filter_ids.append('BLU')
+            compute_sBLU = True
+            
         cols = ['r', 'g', 'b']
         for filt in filter_ids:
             normed_filter_profile = transmission.loc[filt].to_numpy() / transmission.loc[filt].max()
@@ -700,10 +712,17 @@ class SpectralLibraryAnalyser():
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
         ax.set_title(title, fontsize=cfg.LABEL_S)
 
+        if compute_sBLU:
+            filter_ids.remove('BLU')
+            filter_ids.append('sBLU')
+
+        fig.tight_layout()
+
         return fig, ax
 
     def plot_cmfs(self, 
             cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
+            ax: plt.Axes=None
             ) -> Tuple[plt.figure, plt.Axes]:
         """Plot the colour matching functions for the given observer.
 
@@ -724,7 +743,11 @@ class SpectralLibraryAnalyser():
         wvls = cmfs.extrapolate(extrap_params).wavelengths
         labels = ['$\hat{x}$', '$\hat{y}$', '$\hat{z}$']
 
-        fig, ax = plt.subplots(1, 1, figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), dpi=cfg.DPI)
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]), dpi=cfg.DPI)
+        else:
+            fig = ax.get_figure()
+
         cols = ['r', 'g', 'b']
         for profile in profiles.transpose():
             ax.plot(wvls, profile, color=cols.pop(0), label=labels.pop(0), lw=0.8)
@@ -732,6 +755,8 @@ class SpectralLibraryAnalyser():
         ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
         ax.set_title(cmf_label, fontsize=cfg.LABEL_S)
+
+        fig.tight_layout()
 
         return fig, ax
     
@@ -755,17 +780,22 @@ class SpectralLibraryAnalyser():
         ax.set_ylabel('Spectral Power Distribution', fontsize=cfg.LABEL_S)
         ax.set_title(illuminant, fontsize=cfg.LABEL_S)
 
+        fig.tight_layout()
+
         return fig, ax
         
     def compute_colour(self,
-                illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65',
-                cmf_label: Literal[colour.MSDS_CMFS.keys()]='CIE 1964 10 Degree Standard Observer',
-                       ) -> object:
+                conditions: Dict[str, str]={'illuminant': 'D65', 'cmfs': 'CIE 1964 10 Degree Standard Observer', 'label': 'CIE 1964 10 Degree Standard Observer D65'},
+                normalise_rgb: bool=False
+                    ) -> object:
         """Compute the colour of each entry in the Material Collection or 
         Observation according to the given illuminant.
 
         :param illuminant: illuminant to use to compute colour, defaults to 'D65'
         :type illuminant: str, optional
+        :param normalise_rgb: indicate to normalise the RGB values to intentsity,
+                            defaults to False
+        :type normalise_rgb: bool, optional
         :return: Table of colours for each entry
         :rtype: pd.DataFrame
         """
@@ -782,7 +812,7 @@ class SpectralLibraryAnalyser():
         # convert the reflectance data to colour-science spectral ditributions
         sds = colour.MultiSpectralDistributions(refl_df.T)
         # get the illuminant
-        illum = colour.SDS_ILLUMINANTS[illuminant]
+        illum = colour.SDS_ILLUMINANTS[conditions['illuminant']]
         
         # convert the spectral distributions to XYZ space
         # set the integration method
@@ -792,7 +822,7 @@ class SpectralLibraryAnalyser():
             method = 'ASTM E308' # assume high-resolution continuous spectra
         
         # set the colour matching functions
-        cmfs=colour.colorimetry.MSDS_CMFS[cmf_label]
+        cmfs=colour.colorimetry.MSDS_CMFS[conditions['cmfs']]
 
         # convert from spectra to XYZ tristimulus values
         # Note: if spectral range of observed (instrument) data is inside the
@@ -806,15 +836,23 @@ class SpectralLibraryAnalyser():
                                 k=1/100, 
                                 method=method)
 
+        # convert the XYZ values to sRGB        
+        illum_ccs = colour.CCS_ILLUMINANTS[conditions['cmfs']][conditions['illuminant']]
+        rgb = colour.XYZ_to_sRGB(xyz, illum_ccs)
+        rgb = np.clip(rgb, 0, 1)
+
+        if normalise_rgb:
+            rgb[:,0] = rgb[:,0] / np.sum(rgb, axis=1)
+            rgb[:,1] = rgb[:,1] / np.sum(rgb, axis=1)
+            rgb[:,2] = rgb[:,2] / np.sum(rgb, axis=1)
+            rgb = np.clip(rgb, 0, 1)
+            # recompute XYZ values
+            xyz = colour.sRGB_to_XYZ(rgb, illum_ccs)
+
         # append the XYZ values to the new colour df
         col_obj.main_df['X'] = xyz[:,0]
         col_obj.main_df['Y'] = xyz[:,1]
         col_obj.main_df['Z'] = xyz[:,2]
-
-        # convert the XYZ values to sRGB        
-        illum_ccs = colour.CCS_ILLUMINANTS[cmf_label][illuminant]
-        rgb = colour.XYZ_to_sRGB(xyz, illum_ccs)
-        rgb = np.clip(rgb, 0, 1)
 
         col_obj.main_df['R'] = rgb[:,0]
         col_obj.main_df['G'] = rgb[:,1]
@@ -844,10 +882,7 @@ class SpectralLibraryAnalyser():
         col_obj.main_df = col_obj.main_df.loc[:, 'Colour':]
         # drop 'Colour' column
         col_obj.main_df.drop('Colour', axis=1, inplace=True)
-        if self.obj_type == 'observation':
-            colour_conditions = cmf_label+' '+illuminant+' '+self.spectra_obj.instrument.name
-        else:
-            colour_conditions = cmf_label+' '+illuminant
+        colour_conditions = conditions['label']
         col_obj.main_df.columns = pd.MultiIndex.from_product([[colour_conditions], col_obj.main_df.columns])
 
         self.spectra_obj.colour_df = col_obj.main_df
@@ -855,16 +890,22 @@ class SpectralLibraryAnalyser():
         return col_obj
 
     def compute_false_colour(self,
-            filter_ids: Tuple[str, str, str],
-            illuminant: str=None) -> object:
+            conditions: Dict,
+            normalise_rgb: bool=False) -> object:
         """Compute the false colour of each entry in the given Observation for
         the given instrument filter IDs.
 
-        :param filter_ids: Filter IDs for the instrument
-        :type filter_ids: Tuple[str, str, str]
+        :param conditions: Dictionary of conditions for the false colour computation
+        :type conditions: Dict
+        :param normalise_L: indicate to normalise the L luminance value,
+                            defaults to False
+        :type normalise_L: bool, optional
         :return: Observation duplicate of false colours for each entry
         :rtype: Observation
         """
+
+        filter_ids = conditions['filter_ids']
+
         # special case for CaSSIS synthetic RGB image:
         compute_sBLU = False
         if 'sBLU' in filter_ids:
@@ -872,7 +913,7 @@ class SpectralLibraryAnalyser():
             filter_ids.append('BLU')
             compute_sBLU = True 
 
-        filter_labels= filter_ids[0]+'-'+filter_ids[1]+'-'+filter_ids[2]
+        filter_labels= conditions['label']
         # deep copy the spectra object
         false_col_obj = copy.deepcopy(self.spectra_obj)
 
@@ -885,12 +926,37 @@ class SpectralLibraryAnalyser():
         rgb = np.clip(rgb, 0, 1)
 
         if compute_sBLU:
-            rgb[:,2] = 2*rgb[:,0] - 0.3*rgb[:,1]
+            # set I/F -> DN conversion factors for CaSSIS from Pommerol et al. 2022
+            C_BLU = 2.793E-8
+            C_PAN = 1.481E-8
+            r_h2 = 1.52**2
+            t_exp = 0.6E-3
+            rgb[:,2] = 2*rgb[:,0]/(C_PAN*r_h2/t_exp) - 0.3*rgb[:,1]/(C_BLU*r_h2/t_exp)
+            rgb[:,1] = rgb[:,1]/(C_BLU*r_h2/t_exp)
+            rgb[:,0] = rgb[:,0]/(C_PAN*r_h2/t_exp)
+            rgb = rgb/rgb.max()
             filter_ids.remove('BLU')
             filter_ids.append('sBLU')
-        rgb = np.clip(rgb, 0, 1)
-        filter_labels= filter_ids[0]+'-'+filter_ids[1]+'-'+filter_ids[2]
+        rgb = np.clip(rgb, 0, 1)        
 
+        if normalise_rgb:
+            rgb[:,0] = rgb[:,0] / np.sum(rgb, axis=1)
+            rgb[:,1] = rgb[:,1] / np.sum(rgb, axis=1)
+            rgb[:,2] = rgb[:,2] / np.sum(rgb, axis=1)
+            rgb = np.clip(rgb, 0, 1)
+
+        # convert RGB back to XYZ and add to object
+        XYZ = colour.RGB_to_XYZ(rgb, 'sRGB')
+
+        # convert XYZ to xyY and add to object
+        xyY = colour.XYZ_to_xyY(XYZ)
+
+
+        # convert to Lab
+        Lab = colour.XYZ_to_Lab(XYZ)
+
+        # convert to LCh
+        LCh = colour.Lab_to_LCHab(Lab)
 
         # set the RGB values for the false colours
         false_col_obj.main_df.drop(self.wvls, axis=1, inplace=True)
@@ -898,31 +964,23 @@ class SpectralLibraryAnalyser():
         false_col_obj.main_df['R'] = rgb[:,0]
         false_col_obj.main_df['G'] = rgb[:,1]
         false_col_obj.main_df['B'] = rgb[:,2]
-        
-        # convert RGB back to XYZ and add to object
-        XYZ = colour.RGB_to_XYZ(rgb, 'sRGB')
 
         # append the XYZ values to the new colour df
         false_col_obj.main_df['X'] = XYZ[:,0]
         false_col_obj.main_df['Y'] = XYZ[:,1]
         false_col_obj.main_df['Z'] = XYZ[:,2]
 
-        # convet XYZ to xyY and add to object
-        xyY = colour.XYZ_to_xyY(XYZ)
-
+        # append the xyY values to the new colour df
         false_col_obj.main_df['x'] = xyY[:,0]
         false_col_obj.main_df['y'] = xyY[:,1]
         false_col_obj.main_df['Y'] = xyY[:,2]
 
-        # convert to Lab
-        Lab = colour.XYZ_to_Lab(XYZ)
-
+        # append the Lab values to the new colour df
         false_col_obj.main_df['L*'] = Lab[:,0]
         false_col_obj.main_df['a*'] = Lab[:,1]
         false_col_obj.main_df['b*'] = Lab[:,2]
 
-        # convert to LCh
-        LCh = colour.Lab_to_LCHab(Lab)
+        # append the LCh values to the new colour df
         # col_obj.main_df['L*'] = LCh[:,0]
         false_col_obj.main_df['C*'] = LCh[:,1]
         false_col_obj.main_df['h'] = LCh[:,2]
@@ -945,7 +1003,7 @@ class SpectralLibraryAnalyser():
         return false_col_obj
     
     def render_colour_contact_sheet(self,
-            conditions: str,
+            conditions: Dict,
             srgb_compare: Union[bool, object]=False
             ) -> Tuple[plt.figure, plt.axes]:
         """Render the colour of each entry in the spectral library according
@@ -961,15 +1019,8 @@ class SpectralLibraryAnalyser():
         :rtype: Tuple[plt.figure, plt.axes]
         """
         
-        # # load the spectral library        
-        # index = self.spectra_obj.main_df.index
-
-        # rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()        
-
-        # cats = self.spectra_obj.main_df['Category'][index]
-        
         # title_sfx = conditions
-        title_sfx = conditions
+        title_sfx = conditions['label']
         
         # if compare, load the comparison material collection colour df
         if srgb_compare and self.obj_type == 'observation':
@@ -983,7 +1034,6 @@ class SpectralLibraryAnalyser():
         # Parse through the complete spectral library to count
         # the number of pages needed and the distribution of the categories
         # and mineral groups over the columns and rows of each page.
- 
 
         # define page settings
         N_rows = 8 # max number of rows allowed for 1 page  (1 fig)
@@ -1110,7 +1160,7 @@ class SpectralLibraryAnalyser():
                 i = page_cats[page][cat][0]
                 f = page_cats[page][cat][1]            
                 cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]
-                cat_rgb = cat_df[conditions][['R', 'G', 'B']].iloc[i:f+1]
+                cat_rgb = cat_df[conditions['label']][['R', 'G', 'B']].iloc[i:f+1]
                 
                 # get the number of rows used by this category
                 cat_r = int((f - i + 1) / N_cols)
@@ -1178,7 +1228,8 @@ class SpectralLibraryAnalyser():
             # export page as pdf page
             contact_sheet_dir=Path(self.project_dir,'contact_sheet')            
             contact_sheet_dir.mkdir(parents=True, exist_ok=True)
-            filepath=Path(contact_sheet_dir, f'{self.spectra_obj.spectral_library} {conditions} page_{page}').with_suffix('.pdf') # locked as PDF not PNG
+            filename = f'{self.spectra_obj.spectral_library} {conditions["label"]} page_{page}'
+            filepath=Path(contact_sheet_dir, filename).with_suffix('.pdf') # locked as PDF not PNG
             plt.savefig(filepath, bbox_inches='tight', pad_inches = 0.1)
 
             figs.append(fig)
@@ -1187,7 +1238,8 @@ class SpectralLibraryAnalyser():
         return figs, axes
     
     def render_rgb_cube(self,
-                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+                        conditions: Dict,
+                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the RGB cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -1195,15 +1247,18 @@ class SpectralLibraryAnalyser():
         :return: Figure and Axes of the plot
         :rtype: Tuple[plt.figure, plt.axes]
         """
-        title_sfx = conditions
+        title_sfx = conditions['label']
         
         # load the spectral library
         index = self.spectra_obj.main_df.index
-        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions['label']][['R', 'G', 'B']].to_numpy()
 
         # make a 3D plot of rgb array
-        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        ax = fig.add_subplot(111, projection='3d')
+        if ax is None:
+            fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+            ax = fig.add_subplot(111, projection='3d')
+        else:
+            fig = ax.get_figure()
 
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
@@ -1213,12 +1268,16 @@ class SpectralLibraryAnalyser():
         for i, cat in enumerate(uniq_cats):
             cat_rgb = rgb[cats == cat]
             # plot each point in turn to give separate colour
-            ax.scatter(cat_rgb[:,0], cat_rgb[:,1], cat_rgb[:,2], 
-                        c=cat_rgb, 
-                        depthshade=True, 
-                        marker=syms_list[i], 
-                        alpha=0.9,
-                        label=cat)
+            for e in range(cat_rgb.shape[0]):
+                mrkr, stem, base = ax.stem([cat_rgb[e,2]], 
+                                            [cat_rgb[e,0]], 
+                                            [cat_rgb[e,1]], 
+                                            label=cat, 
+                                            markerfmt=syms_list[i])                
+                mrkr.set_markerfacecolor(cat_rgb[e,:])
+                mrkr.set_markeredgecolor(cat_rgb[e,:])
+                stem.set_color(cat_rgb[e,:])                
+                base.set_color(cat_rgb[e,:])
         ax.set_xlabel('B', color='blue', fontsize=cfg.LEGEND_S)
         ax.tick_params(axis='x', colors='blue', labelsize=cfg.LEGEND_S)
         ax.set_ylabel('R', color='red', fontsize=cfg.LEGEND_S)
@@ -1231,13 +1290,15 @@ class SpectralLibraryAnalyser():
         ax.zaxis.labelpad=-3.5
         ax.invert_yaxis()
         ax.set_title(f'{title_sfx}\n RGB Cube', fontsize=cfg.LABEL_S)
+        
         fig.tight_layout()
         # export as pdf   
 
         return fig, ax
     
     def render_XYZ_cube(self,
-                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+                        conditions: Dict,
+                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the XYZ cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -1245,16 +1306,19 @@ class SpectralLibraryAnalyser():
         :return: Figure and Axes of the plot
         :rtype: Tuple[plt.figure, plt.axes]
         """
-        title_sfx = conditions
+        title_sfx = conditions['label']
         
         # load the spectral library
         index = self.spectra_obj.main_df.index
-        XYZ = self.spectra_obj.colour_df[conditions][['X', 'Y', 'Z']].to_numpy()
-        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+        XYZ = self.spectra_obj.colour_df[conditions['label']][['X', 'Y', 'Z']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions['label']][['R', 'G', 'B']].to_numpy()
 
-        # make a 3D plot of rgb array
-        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        ax = fig.add_subplot(111, projection='3d')
+        # make a 3D plot of XYZ array
+        if ax is None:
+            fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+            ax = fig.add_subplot(111, projection='3d')
+        else:
+            fig = ax.get_figure()
 
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
@@ -1282,14 +1346,15 @@ class SpectralLibraryAnalyser():
         ax.zaxis.labelpad=-3.5     
         ax.invert_yaxis()
         ax.set_title(f'{title_sfx}\n XYZ Cube', fontsize=cfg.LABEL_S)
+        
         fig.tight_layout()
         # export as pdf    
 
         return fig, ax
     
-
     def render_xyY_cube(self,
-                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+                        conditions: Dict,
+                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the xyY cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -1297,16 +1362,19 @@ class SpectralLibraryAnalyser():
         :return: Figure and Axes of the plot
         :rtype: Tuple[plt.figure, plt.axes]
         """
-        title_sfx = conditions
+        title_sfx = conditions['label']
         
         # load the spectral library
         index = self.spectra_obj.main_df.index
-        xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
-        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+        xyY = self.spectra_obj.colour_df[conditions['label']][['x', 'y', 'Y']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions['label']][['R', 'G', 'B']].to_numpy()
 
-        # make a 3D plot of rgb array
-        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        ax = fig.add_subplot(111, projection='3d')
+        # make a 3D plot of xyY array
+        if ax is None:
+            fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+            ax = fig.add_subplot(111, projection='3d')
+        else:
+            fig = ax.get_figure()
 
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
@@ -1334,13 +1402,15 @@ class SpectralLibraryAnalyser():
         ax.zaxis.labelpad=-3.5      
         # ax.invert_yaxis()
         ax.set_title(f'{title_sfx}\n xyY Cube', fontsize=cfg.LABEL_S)
+        
         fig.tight_layout()
         # export as pdf    
 
         return fig, ax
 
     def render_xy_chromaticity_diagram(self,
-                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+                        conditions: Dict,
+                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the xy chromaticity diagram of the spectral library for 
         the given conditions.
 
@@ -1352,26 +1422,28 @@ class SpectralLibraryAnalyser():
 
         # *** Plotting in chromaticity space ***
 
-        title_sfx = conditions
+        title_sfx = conditions['label']
         
         # load the spectral library
         index = self.spectra_obj.main_df.index
-        xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
-        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
-        
-        fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
-            cmfs=colour.MSDS_CMFS['CIE 1964 10 Degree Standard Observer'],
-            show=False, 
-            show_spectral_locus=True,
-            show_diagram_colours=True,
-            transparent_background=False,            
-            figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]),
-            dpi=cfg.DPI
-            )
-    
-        # set figure size
-        fig.set_size_inches(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
-            
+        xyY = self.spectra_obj.colour_df[conditions['label']][['x', 'y', 'Y']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions['label']][['R', 'G', 'B']].to_numpy()
+
+        if ax is None:        
+            fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
+                cmfs=colour.MSDS_CMFS['CIE 1964 10 Degree Standard Observer'],
+                show=False, 
+                show_spectral_locus=False,
+                show_diagram_colours=True,
+                transparent_background=False,            
+                figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]),
+                dpi=cfg.DPI
+                )
+            # set figure size
+            fig.set_size_inches(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+        else:
+            fig = ax.get_figure()
+ 
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
         # cat to integer
@@ -1391,13 +1463,14 @@ class SpectralLibraryAnalyser():
             ax.plot(x, y, 
                     f"{sym}", color=list(rgb[i]), 
                     label=swatch_name, 
-                    markeredgewidth=0.5,
-                    markeredgecolor='white', markersize=4)
+                    markeredgewidth=0.4,
+                    markersize=4,
+                    markeredgecolor='white')
         
         # plot the sRGB space in the chromaticity diagram
         sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
-        ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB')
-        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='') 
+        ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB', linewidth=0.5)
+        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='', linewidth=0.5) 
 
         # if number of entries is >20, just add legend for categories, as a white symbol
         handles, labels = ax.get_legend_handles_labels()
@@ -1420,9 +1493,24 @@ class SpectralLibraryAnalyser():
                                     color='w', marker='o', markersize=6, label=cat))
         
         ax.legend(handles, labels, loc='upper right', fontsize='x-small')
-                
+        
+        # set axes font sizes
+        ax.set_xlabel('CIE $x$', fontsize=cfg.LABEL_S)
+        ax.set_ylabel('CIE $y$', fontsize=cfg.LABEL_S)
+
+        # set axes tick label font size
+        ax.tick_params(axis='both', labelsize=cfg.LABEL_S)
+
+        # set x and y limits
+        ax.set_xlim(0, 0.95)
+        ax.set_ylim(0, 0.85)
+
+        # reset title
+        ax.set_title(f'{title_sfx}\n CIE 1931 Chromaticity Diagram', fontsize=cfg.LABEL_S)
+
         # set figure size
-        fig.set_size_inches(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1])   
+        fig.set_size_inches(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+
         # set DPI
         fig.set_dpi(cfg.DPI)
 
@@ -1431,7 +1519,8 @@ class SpectralLibraryAnalyser():
         return fig, ax
 
     def render_Lab_cube(self,
-                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+                        conditions: Dict,
+                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the L*a*b* cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -1439,16 +1528,19 @@ class SpectralLibraryAnalyser():
         :return: Figure and Axes of the plot
         :rtype: Tuple[plt.figure, plt.axes]
         """
-        title_sfx = conditions
+        title_sfx = conditions['label']
         
         # load the spectral library
         index = self.spectra_obj.main_df.index
-        Lab = self.spectra_obj.colour_df[conditions][['L*', 'a*', 'b*']].to_numpy()
-        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+        Lab = self.spectra_obj.colour_df[conditions['label']][['L*', 'a*', 'b*']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions['label']][['R', 'G', 'B']].to_numpy()
 
-        # make a 3D plot of rgb array
-        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        ax = fig.add_subplot(111, projection='3d')
+        # make a 3D plot of Lab array
+        if ax is None:
+            fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+            ax = fig.add_subplot(111, projection='3d')
+        else:
+            fig = ax.get_figure()
 
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
@@ -1480,7 +1572,7 @@ class SpectralLibraryAnalyser():
         ax.set_ylim(-100, 100)
         ax.set_zlim(0, 100)  
         ax.zaxis.labelpad=-3.5              
-        ax.set_title(f'{title_sfx}\n L*a*b* Cube', fontsize=cfg.LABEL_S)
+        ax.set_title(f'{title_sfx}\n CIE L*a*b* Cube', fontsize=cfg.LABEL_S)
         fig.tight_layout()
         # export as pdf    
 
@@ -1504,14 +1596,16 @@ class SpectralLibraryAnalyser():
         ax_ab.tick_params(axis='y', labelsize=cfg.LEGEND_S)
         ax_ab.set_xlim(-100, 100)
         ax_ab.set_ylim(-100, 100)
-        ax_ab.set_title(f'{title_sfx} Lab ab Plane', fontsize=cfg.LABEL_S)
+        ax_ab.set_title(f'{title_sfx}\n CIE a*b* Plane', fontsize=cfg.LABEL_S)
+        
         fig_ab.tight_layout()        
         # export as pdf
 
         return fig, ax
 
     def render_Chab_plane(self,
-                        conditions: str) -> Tuple[plt.figure, plt.axes]:
+                        conditions: Dict,
+                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the C*h(ab) plane of the spectral library for the given conditions.
         Note that no method is available AFAIK for rendring a polar cyclindrical
         plot of the LCh space. So only plotting 2D C*h polar plane.
@@ -1521,12 +1615,12 @@ class SpectralLibraryAnalyser():
         :return: Figure and Axes of the plot
         :rtype: Tuple[plt.figure, plt.axes]
         """
-        title_sfx = conditions
+        title_sfx = conditions['label']
         
         # load the spectral library
         index = self.spectra_obj.main_df.index
-        LCh = self.spectra_obj.colour_df[conditions][['L*', 'C*', 'h']].to_numpy()
-        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+        LCh = self.spectra_obj.colour_df[conditions['label']][['L*', 'C*', 'h']].to_numpy()
+        rgb = self.spectra_obj.colour_df[conditions['label']][['R', 'G', 'B']].to_numpy()
 
 
         # separately plot each catgeory with a different marker
@@ -1564,8 +1658,11 @@ class SpectralLibraryAnalyser():
         # # export as pdf    
 
         # Ch plot
-        fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        ax = fig.add_subplot(111, projection='polar')
+        if ax is None:
+            fig = plt.figure(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+            ax = fig.add_subplot(111, projection='polar')
+        else:
+            fig = ax.get_figure()
 
         # add grid
         ax.set_axisbelow(True)
@@ -1581,127 +1678,261 @@ class SpectralLibraryAnalyser():
             # set radial axis font size
             ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
             ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
-        ax.set_title(fr"{title_sfx}""\n LCh Chroma "rf"($r$) hue ($\theta$) Plane", fontsize=cfg.LABEL_S)
+        ax.set_title(fr"{title_sfx}""\n CIE L*C*h(ab) Chroma "rf"($r$) hue ($\theta$) Plane", fontsize=cfg.LABEL_S)
+        
         fig.tight_layout()        
         # export as pdf
 
         return fig, ax
 
-    def render_colour(self,
-            conditions: str,
-            srgb_compare: Union[bool, object]=False) -> plt.figure:
+    def render_colour(self, 
+                    conditions: Dict,
+                    colour_contact_sheet: bool=True,
+                    sampling_profiles: bool=True,
+                    rgb_cube: bool=True,
+                    XYZ_cube: bool=False,
+                    xyY_cube: bool=False,
+                    xy_chromaticity_diagram: bool=True,
+                    Lab_cube: bool=False,
+                    Chab_plane: bool=True,
+                      ) -> Tuple[plt.figure, plt.axes]:
         """Render the colour of each spectrum in the spectral library according
         to the given computed colour coordinates.
 
-        :param colour_obj: Colour object with tables of RGB, XYZ and xyY values
-        :type colour_obj: object, MaterialCollection or Observation
-        :param srgb_compare: Indicate if sRGB comparison is to be made,
-                defaults to False
-        :type srgb_compare: Union[bool, object], optional
-        :return: Table of colours for each spectrum, and figure of colours
-        :rtype: pd.DataFrame, plt.figure
-        """        
-        # load the spectral library        
-        index = self.spectra_obj.main_df.index
+        :param conditions: Conditions used in the colour computation
+        :type conditions: str
+        :param colour_contact_sheet: Indicate if a colour contact sheet is to be rendered, defaults to True
+        :type colour_contact_sheet: bool, optional
+        :param sampling_profiles: Indicate if sampling profiles are to be rendered, defaults to True
+        :type sampling_profiles: bool, optional
+        :param rgb_cube: Indicate if the RGB cube is to be rendered, defaults to True
+        :type rgb_cube: bool, optional
+        :param XYZ_cube: Indicate if the XYZ cube is to be rendered, defaults to False
+        :type XYZ_cube: bool, optional
+        :param xyY_cube: Indicate if the xyY cube is to be rendered, defaults to False
+        :type xyY_cube: bool, optional
+        :param xy_chromaticity_diagram: Indicate if the xy chromaticity diagram is to be rendered, defaults to False
+        :type xy_chromaticity_diagram: bool, optional
+        :param Lab_cube: Indicate if the Lab cube is to be rendered, defaults to False
+        :type Lab_cube: bool, optional
+        :param Chab_plane: Indicate if the Ch(ab) plane is to be rendered, defaults to True
+        :type Chab_plane: bool, optional
+        :return: Figure and Axes of the plot
+        :rtype: Tuple[plt.figure, plt.axes]
+        """
 
-        rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
-        xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
-
-        cats = self.spectra_obj.main_df['Category'][index]
+        # prepare the figure(s)
+        if colour_contact_sheet:
+            # render the colour contact sheet
+            figs_cs, axes_cs = self.render_colour_contact_sheet(conditions)
         
-        title_sfx = conditions
+        # count the number of figures other than the contact sheet
+        n_figs = sum([
+            rgb_cube, 
+            XYZ_cube, 
+            xyY_cube, 
+            xy_chromaticity_diagram, 
+            Lab_cube, 
+            Chab_plane])
+        # set the number of rows and columns for the figure according to n_figures, with max of 2 columns
+        n_rows = int(np.ceil(n_figs / 2))
+        n_cols = min(n_figs, 2)
 
-        # if compare, load the comparison material collection colour df
-        if srgb_compare and self.obj_type == 'observation':
-            srgb_obj = srgb_compare.material_collection
-            srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
-            srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
-            srgb_cats = srgb_obj.colour_df['Category']
-            title_sfx = f"sRGB vs. {title_sfx}"
+        # set the figure size
+        fig_size = (cfg.FIG_SIZE[0]*n_cols, cfg.FIG_SIZE[1]*n_rows)
 
-        # Plotting the RGB Cube
-        # make a 3D plot of rgb array
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(rgb[:,0], rgb[:,1], rgb[:,2], c=rgb, s=100, depthshade=True)
-        # ax.set_xlabel('R')
-        ax.tick_params(axis='x', colors='red')
-        # ax.set_ylabel('G')
-        ax.tick_params(axis='y', colors='green')
-        # ax.set_zlabel('B')
-        ax.tick_params(axis='z', colors='blue')
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_zlim(0, 1)        
-        ax.set_title(f'{title_sfx} RGB Cube')
+        # create the figure
+        fig = plt.figure(figsize=fig_size, dpi=cfg.DPI, layout='compressed')
+
+        # create grid for different subplots
+        spec = mpl.gridspec.GridSpec(ncols=n_cols, nrows=n_rows,
+                         width_ratios=[1, 1], wspace=0.1,
+                         hspace=0.5, height_ratios=[1, 1])
+
+        # call component rendering functions
+        i = 0
+        if sampling_profiles:
+            ax = fig.add_subplot(spec[i])
+            if 'filter_ids' in conditions.keys():
+                fig_sp, ax_sp = self.plot_filter_ids(conditions['filter_ids'], ax=ax)
+            else:
+                fig_sp, ax_sp = self.plot_cmfs(conditions['cmfs'], ax=ax)
+            fig_label = chr(ord('@')+i+1)
+            ax.set_title(fig_label+'. Sampling Profiles', fontsize=cfg.LEGEND_S)            
+            i += 1
+        if rgb_cube:
+            ax = fig.add_subplot(spec[i], projection='3d')
+            fig_rgb, ax_rgb = self.render_rgb_cube(conditions, ax=ax)            
+            fig_label = chr(ord('@')+i+1)
+            ax.set_title(fig_label+'. RGB Cube', fontsize=cfg.LEGEND_S)        
+            i += 1
+        if XYZ_cube:
+            ax = fig.add_subplot(spec[i], projection='3d')
+            fig_XYZ, ax_XYZ = self.render_XYZ_cube(conditions, ax=ax)            
+            fig_label = chr(ord('@')+i+1)
+            ax.set_title(fig_label+'. CIE XYZ Cube', fontsize=cfg.LEGEND_S)        
+            i += 1
+        if xyY_cube:
+            ax = fig.add_subplot(spec[i], projection='3d')
+            fig_xyY, ax_xyY = self.render_xyY_cube(conditions, ax=ax)            
+            fig_label = chr(ord('@')+i+1)
+            ax.set_title(fig_label+'. CIE xyY Cube', fontsize=cfg.LEGEND_S)        
+            i += 1
+        if xy_chromaticity_diagram:
+            ax = fig.add_subplot(spec[i])
+            _, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
+                cmfs=colour.MSDS_CMFS['CIE 1964 10 Degree Standard Observer'],
+                show=False, 
+                show_spectral_locus=False,
+                show_diagram_colours=True,
+                transparent_background=False,            
+                figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]),
+                dpi=cfg.DPI,
+                axes=ax
+                )
+            fig_xy, ax_xy = self.render_xy_chromaticity_diagram(conditions, ax=ax)    
+            # remove title
+            fig_label = chr(ord('@')+i+1)
+            ax.set_title(fig_label+'. CIE Chromaticity Diagram', fontsize=cfg.LEGEND_S)        
+            i += 1
+        if Lab_cube:
+            ax = fig.add_subplot(spec[i], projection='3d')
+            fig_Lab, ax_Lab = self.render_Lab_cube(conditions, ax=ax)
+            fig_label = chr(ord('@')+i+1)
+            ax.set_title(fig_label+'. CIE L\*a\*b\* Cube', fontsize=cfg.LEGEND_S)        
+            i += 1
+        if Chab_plane:
+            ax = fig.add_subplot(spec[i], projection='polar')
+            fig_Ch, ax_Ch = self.render_Chab_plane(conditions, ax=ax)
+            fig_label = chr(ord('@')+i+1)
+            ax.set_title(fig_label+'. CIE Chroma 'r'($r$) Hue ($\theta$) Plane', fontsize=cfg.LEGEND_S)        
+            i += 1
+
+        # add title to plot
+        fig.suptitle(f'{self.spectra_obj.spectral_library} '+conditions['label'], fontsize=cfg.TITLE_S)
+
+        plt.gcf().set_size_inches(cfg.FIG_SIZE[0]*n_cols, cfg.FIG_SIZE[1]*n_rows)
+
+        # constraint he layout of the subplots
         fig.tight_layout()
-        # export as pdf
-
-        # *** Plotting in chromaticity space ***
-
-        # TODO plot the comparison xyY coordinates, with annotations showing change
         
-        uniq_cats = cats.unique()
-        fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
-            show=False, 
-            show_spectral_locus=True,
-            show_diagram_colours=True,
-            transparent_background=False,            
-            )
-        
-        # cat to integer
-        cat_codes = cats.astype('category').cat.codes
-        syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 
-                     'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+        return figs_cs, axes_cs
 
-        min_list = index.to_list()
-        for i, min in enumerate(min_list):
+    # def render_colour(self,
+    #         conditions: str,
+    #         srgb_compare: Union[bool, object]=False) -> plt.figure:
+    #     """Render the colour of each spectrum in the spectral library according
+    #     to the given computed colour coordinates.
+
+    #     :param colour_obj: Colour object with tables of RGB, XYZ and xyY values
+    #     :type colour_obj: object, MaterialCollection or Observation
+    #     :param srgb_compare: Indicate if sRGB comparison is to be made,
+    #             defaults to False
+    #     :type srgb_compare: Union[bool, object], optional
+    #     :return: Table of colours for each spectrum, and figure of colours
+    #     :rtype: pd.DataFrame, plt.figure
+    #     """        
+    #     # load the spectral library        
+    #     index = self.spectra_obj.main_df.index
+
+    #     rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
+    #     xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
+
+    #     cats = self.spectra_obj.main_df['Category'][index]
+        
+    #     title_sfx = conditions
+
+    #     # if compare, load the comparison material collection colour df
+    #     if srgb_compare and self.obj_type == 'observation':
+    #         srgb_obj = srgb_compare.material_collection
+    #         srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
+    #         srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
+    #         srgb_cats = srgb_obj.colour_df['Category']
+    #         title_sfx = f"sRGB vs. {title_sfx}"
+
+    #     # Plotting the RGB Cube
+    #     # make a 3D plot of rgb array
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111, projection='3d')
+    #     ax.scatter(rgb[:,0], rgb[:,1], rgb[:,2], c=rgb, s=100, depthshade=True)
+    #     # ax.set_xlabel('R')
+    #     ax.tick_params(axis='x', colors='red')
+    #     # ax.set_ylabel('G')
+    #     ax.tick_params(axis='y', colors='green')
+    #     # ax.set_zlabel('B')
+    #     ax.tick_params(axis='z', colors='blue')
+    #     ax.set_xlim(0, 1)
+    #     ax.set_ylim(0, 1)
+    #     ax.set_zlim(0, 1)        
+    #     ax.set_title(f'{title_sfx} RGB Cube')
+    #     fig.tight_layout()
+    #     # export as pdf
+
+    #     # *** Plotting in chromaticity space ***
+
+    #     # TODO plot the comparison xyY coordinates, with annotations showing change
+        
+    #     uniq_cats = cats.unique()
+    #     fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
+    #         show=False, 
+    #         show_spectral_locus=True,
+    #         show_diagram_colours=True,
+    #         transparent_background=False,            
+    #         )
+        
+    #     # cat to integer
+    #     cat_codes = cats.astype('category').cat.codes
+    #     syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 
+    #                  'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
+
+    #     min_list = index.to_list()
+    #     for i, min in enumerate(min_list):
            
-            sym = syms_list[cat_codes.loc[min]]
-            swatch_name = f"{min}".capitalize()
+    #         sym = syms_list[cat_codes.loc[min]]
+    #         swatch_name = f"{min}".capitalize()
                         
-            xy = xyY[i, 0:2]
-            x, y = xy
-            ax.plot(x, y, 
-                    f"{sym}", color=list(rgb[i]), 
-                    label=swatch_name, 
-                    markeredgewidth=0.5,
-                    markeredgecolor='white', markersize=4)
+    #         xy = xyY[i, 0:2]
+    #         x, y = xy
+    #         ax.plot(x, y, 
+    #                 f"{sym}", color=list(rgb[i]), 
+    #                 label=swatch_name, 
+    #                 markeredgewidth=0.5,
+    #                 markeredgecolor='white', markersize=4)
         
-        # plot the sRGB space in the chromaticity diagram
-        sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
-        ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB')
-        ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='') 
+    #     # plot the sRGB space in the chromaticity diagram
+    #     sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
+    #     ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB')
+    #     ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='') 
 
-        # if number of entries is >20, just add legend for categories, as a white symbol
-        handles, labels = ax.get_legend_handles_labels()
+    #     # if number of entries is >20, just add legend for categories, as a white symbol
+    #     handles, labels = ax.get_legend_handles_labels()
 
-        if len(labels) > 20:
-            labels = uniq_cats.categories.to_list()
-            # set the handle to the category symbol
-            handles = [mpl.lines.Line2D([0], [0], 
-                                color='w', markeredgecolor='k', 
-                                marker=syms_list[i], markersize=6, 
-                                label=uniq_cats.categories.to_list()[i]) for i in np.arange(len(uniq_cats))]
+    #     if len(labels) > 20:
+    #         labels = uniq_cats.categories.to_list()
+    #         # set the handle to the category symbol
+    #         handles = [mpl.lines.Line2D([0], [0], 
+    #                             color='w', markeredgecolor='k', 
+    #                             marker=syms_list[i], markersize=6, 
+    #                             label=uniq_cats.categories.to_list()[i]) for i in np.arange(len(uniq_cats))]
 
-        else:
-            # insert category labels into the legend        
-            for cat in uniq_cats:
-                cat_index = cats[cats == cat].index
-                cat_index = labels.index(cat_index[0])
-                labels.insert(cat_index, cat)
-                handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
-                                    color='w', marker='o', markersize=6, label=cat))
+    #     else:
+    #         # insert category labels into the legend        
+    #         for cat in uniq_cats:
+    #             cat_index = cats[cats == cat].index
+    #             cat_index = labels.index(cat_index[0])
+    #             labels.insert(cat_index, cat)
+    #             handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
+    #                                 color='w', marker='o', markersize=6, label=cat))
         
-        ax.legend(handles, labels, loc='upper right', fontsize='x-small')
+    #     ax.legend(handles, labels, loc='upper right', fontsize='x-small')
         
-        fig.suptitle(f'{title_sfx}', fontsize='large')
+    #     fig.suptitle(f'{title_sfx}', fontsize='large')
 
-        # set figure size
-        fig.set_size_inches(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1])   
-        # set DPI
-        fig.set_dpi(cfg.DPI)
+    #     # set figure size
+    #     fig.set_size_inches(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1])   
+    #     # set DPI
+    #     fig.set_dpi(cfg.DPI)
 
-        fig.tight_layout()  
+    #     fig.tight_layout()  
         
-        return fig
+    #     return fig

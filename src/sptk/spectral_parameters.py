@@ -198,6 +198,30 @@ class SpectralParameters():
             sp_type_list = None
         return sp_type_list
 
+    def append_colours(self) -> None:
+        """Append the colour spaces computed on the Observation to the main
+        Spectral Parameters DataFrame, and add a 'Spectral Parameters' column
+        to the multiindex.
+        """
+        colour_df = self.observation.colour_df
+        sp_list = self.sp_list
+        # create a multiindex for the sp_list
+        sp_list = pd.MultiIndex.from_product([['Spectral Parameters'], sp_list])
+        # label all other columns as 'Header' in multiindex
+        hdr_list = self.material_collection.header_list.copy()
+        # add category at the front of the hdr list
+        hdr_list.insert(0, 'Category')
+        hdr_list = pd.MultiIndex.from_product([['Header'], hdr_list])
+        # drop 'Spectral Parameters' column if it exists
+        if 'Spectral Parameters' in self.main_df.columns:
+            self.main_df.drop('Spectral Parameters', axis=1, inplace=True)
+        # apply the multiindex to the main_df
+        sp_df_multiind = hdr_list.append(sp_list)
+        self.main_df.columns = sp_df_multiind
+        self.main_df = pd.concat([self.main_df, colour_df], axis=1)
+        # log colour list
+        self.colourspace_list = colour_df.columns.get_level_values(0).unique()
+
     def compute_spectral_parameters(self,
             scope: str='all',
             export_df: bool=cfg.EXPORT_DF) -> None:

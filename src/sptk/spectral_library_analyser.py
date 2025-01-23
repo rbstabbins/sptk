@@ -276,7 +276,7 @@ class SpectralLibraryAnalyser():
                     hue=hue_flag,
                     style=hue_flag,
                     markeredgewidth=0.0,
-                    alpha=0.3,
+                    alpha=0.5,
                     units='Data ID',
                     estimator=None,
                     lw=0.5,
@@ -891,15 +891,21 @@ class SpectralLibraryAnalyser():
 
     def compute_false_colour(self,
             conditions: Dict,
-            normalise_rgb: bool=False) -> object:
+            normalise_rgb: bool=False,
+            normalise_spectrum: bool=False,
+            normalise_L: bool=False,
+            overwrite: bool=False) -> object:
         """Compute the false colour of each entry in the given Observation for
         the given instrument filter IDs.
 
         :param conditions: Dictionary of conditions for the false colour computation
         :type conditions: Dict
-        :param normalise_L: indicate to normalise the L luminance value,
+        :param normalise_rgb: indicate to normalise the RGB to intensity,
                             defaults to False
-        :type normalise_L: bool, optional
+        :type normalise_rgb: bool, optional
+        :param normalise_spectrum: indicate to normalise the spectra to intensity,
+                            defaults to False
+        :type normalise_spectrum: bool, optional
         :return: Observation duplicate of false colours for each entry
         :rtype: Observation
         """
@@ -922,7 +928,13 @@ class SpectralLibraryAnalyser():
         inst_info = self.spectra_obj.instrument.get_metrics()
         cwls = inst_info.loc[filter_ids].cwl.to_list()
         refl_df = self.spectra_obj.get_refl_df()
-        rgb = refl_df[cwls].to_numpy()
+
+        if normalise_spectrum:
+            norm_refl_df = refl_df.divide(refl_df.max(axis=1),axis=0)
+            rgb = norm_refl_df[cwls].to_numpy()    
+        else:
+            rgb = refl_df[cwls].to_numpy()
+
         rgb = np.clip(rgb, 0, 1)
 
         if compute_sBLU:
@@ -948,12 +960,17 @@ class SpectralLibraryAnalyser():
         # convert RGB back to XYZ and add to object
         XYZ = colour.RGB_to_XYZ(rgb, 'sRGB')
 
-        # convert XYZ to xyY and add to object
-        xyY = colour.XYZ_to_xyY(XYZ)
-
-
         # convert to Lab
         Lab = colour.XYZ_to_Lab(XYZ)
+        
+        if normalise_L:
+            Lab[:,0] = Lab[:,0]*0.0 + 100.0
+            XYZ = colour.Lab_to_XYZ(Lab)
+            rgb = colour.XYZ_to_RGB(XYZ, 'sRGB')
+            rgb = np.clip(rgb, 0, 1)
+
+        # convert XYZ to xyY and add to object
+        xyY = colour.XYZ_to_xyY(XYZ)
 
         # convert to LCh
         LCh = colour.Lab_to_LCHab(Lab)
@@ -997,11 +1014,248 @@ class SpectralLibraryAnalyser():
             levels = self.spectra_obj.colour_df.columns.get_level_values(0).unique()
             if filter_labels not in levels:
                 self.spectra_obj.colour_df = pd.concat([self.spectra_obj.colour_df, false_col_obj.main_df], axis=1)
+            elif overwrite:
+                self.spectra_obj.colour_df[filter_labels] = false_col_obj.main_df
         else:
             self.spectra_obj.colour_df = false_col_obj.main_df
 
         return false_col_obj
     
+    # def render_colour_rendition_chart(self,
+    #         conditions: Dict,
+    #         srgb_compare: Union[bool, object]=False
+    #         ) -> Tuple[plt.figure, plt.axes]:
+    #     """Render the colour of each entry in the spectral library according
+    #     to the given computed colour coordinates.
+    #     Arrange on Colour Rendition Charts as defined by Colour Science library.
+
+    #     :param conditions: Conditions used in the colour computation
+    #     :type conditions: str
+    #     :param srgb_compare: Indicate if sRGB comparison is to be made against 
+    #         the provided MaterialCollection (object), defaults to False
+    #     :type srgb_compare: Union[bool, object], optional
+    #     :return: Figure and Axes of the plot
+    #     :rtype: Tuple[plt.figure, plt.axes]
+    #     """
+        
+    #     # title_sfx = conditions
+    #     title_sfx = conditions['label']
+        
+    #     # if compare, load the comparison material collection colour df
+    #     if srgb_compare and self.obj_type == 'observation':
+    #         srgb_obj = srgb_compare.material_collection
+    #         srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
+    #         srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
+    #         srgb_cats = srgb_obj.colour_df['Category']
+    #         title_sfx = f"sRGB vs. {title_sfx}"
+
+    #     # ***Configure Page Layout(s) and Matplotlib Figure(s)***
+    #     # Parse through the complete spectral library to count
+    #     # the number of pages needed and the distribution of the categories
+    #     # and mineral groups over the columns and rows of each page.
+
+    #     # define page settings
+    #     N_rows = 8 # max number of rows allowed for 1 page  (1 fig)
+    #     N_cols = 6 # max number of columns allowed for 1 page (1 fig)
+    #     spacing = 1.0 # space in inches between rows and columns
+
+    #     # initiate category counter dicts
+    #     cat_ns = {}     # dict of entries in each category        
+    #     cat_cols = {}   # dict of columns needed for each category
+    #     cat_rows = {}   # dict of rows needed for each category
+    #     t_rows = 0 # counter of total number of rows needed for all categories
+
+    #     # populate category counters
+    #     index = self.spectra_obj.main_df.index
+    #     cats = self.spectra_obj.main_df['Category'][index]
+    #     for cat in cats.unique():
+    #         cat_n = len(cats[cats == cat]) # number of entries in given category
+    #         cat_ns[cat] = cat_n # dict lookup of # entries in category
+    #         if cat_n >= N_cols: # if there are more entries than columns...
+    #             cat_cols[cat] = N_cols  # ...set number of columns to N_cols
+    #              # compute the number of rows needed given the fixed # columns
+    #             cat_rows[cat] = int(np.ceil(cat_n / N_cols))
+    #         else: # otherwise the number of columns is the number of entries
+    #             cat_cols[cat] = cat_n 
+    #             cat_rows[cat] = 1 # and the numebr of rows is 1                        
+    #         t_rows += cat_rows[cat] # running total of rows needed for all categories
+
+    #     N_pages = 1 + (t_rows-1) // N_rows # number of pages needed to plot all
+        
+    #     # Build a map of distribution of categories and entries across the pages
+    #     page_cats = {} # dict of pages with categories and entry indices
+    #     page = 0
+    #     cat_list = cats.unique().to_list()
+    #     cat = cat_list.pop()
+    #     cat_rows_left = cat_rows[cat]
+    #     i = 0 # initialise the first index of the category
+    #     f = 0 # initialise the last index of the category
+    #     page_cats[page] = {} # initialise the first page cat dictionary
+    #     page_rows = 0
+        
+    #     rows_used = 0  # count the used rows of the page
+    #     # if it hits N_rows, then move to next page
+    #     while rows_used < t_rows:  # stop when every row is rendered                     
+    #         if cat_rows_left + page_rows < N_rows: 
+    #             # if the rest of the category fits on the page,
+    #             # add the category to the page
+    #             f = i + cat_rows_left*N_cols - 1
+    #             page_cats[page][cat] = (i,f)
+    #             page_rows += cat_rows_left
+    #             rows_used += cat_rows_left
+    #             if f < i:                    
+    #                 raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
+    #             if len(cat_list) > 0:
+    #                 cat = cat_list.pop()
+    #                 cat_rows_left = cat_rows[cat]
+    #                 i = 0                
+    #         elif cat_rows_left + page_rows == N_rows: 
+    #             # if the rest of the category fills the page,
+    #             # add the category to the page
+    #             f = i + cat_rows_left*N_cols - 1
+    #             page_cats[page][cat] = (i,f)
+    #             page_rows += cat_rows_left
+    #             rows_used += cat_rows_left
+    #             if f < i:
+    #                 raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
+    #             if len(cat_list) > 0:
+    #                 cat = cat_list.pop()
+    #                 cat_rows_left = cat_rows[cat]
+    #                 i = 0
+    #             if rows_used < t_rows:
+    #                 page += 1
+    #                 page_rows = 0
+    #                 page_cats[page] = {}
+    #         elif cat_rows_left + page_rows > N_rows: 
+    #             # if the rest of the category does not fit on the page,
+    #             # only use rows up to total of N_rows
+    #             cat_r = N_rows - page_rows # the number of rows available
+    #             f = i + cat_r*N_cols - 1
+    #             cat_rows_left -= cat_r
+    #             rows_used += cat_r
+    #             page_rows += cat_r
+    #             page_cats[page][cat] = (i,f)
+    #             if f < i:
+    #                 raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
+    #             page += 1
+    #             page_rows = 0
+    #             page_cats[page] = {}
+    #             i = f + 1
+
+    #     # ***Render the Colour Contact Sheet according to the above mapping***
+    #     figs = []
+    #     axes = []
+    #     for page in np.arange(N_pages):
+            
+    #         # *** Formatting the page of the figure ***
+            
+    #         # get the categories on the page
+    #         cats_on_page = list(page_cats[page].keys())
+
+    #         # get the total number of rows used on the page
+    #         rows_used = 0
+    #         for cat in cats_on_page:    
+    #             page_cat_i = page_cats[page][cat][0]
+    #             page_cat_f = page_cats[page][cat][1]
+    #             cat_rows_used = int((page_cat_f - page_cat_i + 1) / N_cols)
+    #             rows_used += cat_rows_used
+            
+    #         # draw figure on page
+    #         fig = plt.figure(
+    #             figsize=(N_cols*spacing, rows_used*spacing), 
+    #             dpi=cfg.DPI, 
+    #             layout='compressed')
+    #         spec = fig.add_gridspec(rows_used,1) # use gridspec to handle multi-page plots
+
+    #         # *** Drawing the figure on the page ***
+
+    #         r = 0 # initialise the row counter
+    #         for c, cat in enumerate(cats_on_page):
+                
+    #             # use scatterplot to distribute entries evenly over the N_cols 
+    #             # and N_rows of the grid.
+
+    #             # get the index of the samples in this category    
+    #             i = page_cats[page][cat][0]
+    #             f = page_cats[page][cat][1]            
+    #             cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]
+    #             cat_rgb = cat_df[conditions['label']][['R', 'G', 'B']].iloc[i:f+1]
+                
+    #             # get the number of rows used by this category
+    #             cat_r = int((f - i + 1) / N_cols)
+
+    #             # add a subplot for the category
+    #             ax_c = fig.add_subplot(spec[r:r+cat_r, :], adjustable='box')
+
+    #             r += cat_r
+
+    #             # get the index of the comparison samples in this category
+    #             if srgb_compare and self.obj_type == 'observation':
+    #                 srgb_obj = srgb_compare.material_collection
+    #                 srgb_cat_df = srgb_obj.colour_df[srgb_obj.colour_df['Category'] == cat]
+    #                 srgb_cat_rgb = srgb_cat_df[['R', 'G', 'B']].iloc[i:f+1]                
+
+    #             for i, entry in enumerate(cat_rgb.index):
+                    
+    #                 x = i % cat_cols[cat] + 0.5
+    #                 y = np.ceil(i // cat_cols[cat]) + 0.5
+
+    #                 if srgb_compare and self.obj_type == 'observation':
+    #                     srgb_col = srgb_cat_rgb.loc[entry].to_numpy()
+    #                     ax_c.scatter(x-0.15,y,
+    #                                     color=srgb_col,
+    #                                     s=200,
+    #                                     edgecolor='black')
+    #                     col = cat_rgb.loc[entry].to_numpy()
+    #                     ax_c.scatter(x+0.15,y,
+    #                                     color=col,
+    #                                     s=200,
+    #                                     edgecolor='black')
+    #                 else:
+    #                     col = cat_rgb.loc[entry].to_numpy()
+    #                     ax_c.scatter(x,y,
+    #                                     color=col,
+    #                                     s=200,
+    #                                     edgecolor='black')
+                    
+    #                 # annotate                                        
+    #                 min_name = self.spectra_obj.main_df.loc[entry]['Mineral Name']
+    #                 entry = str(entry).replace('_', '\n') # turn underscore into carriage return
+    #                 entry = str(entry).replace(' ', '\n') # get mineral name
+    #                 entry = entry.title() 
+    #                 entry = min_name.title() + '\n' + entry
+    #                 ax_c.annotate(entry, (x, y), 
+    #                                  (0,-1.5), 
+    #                                  textcoords='offset fontsize', 
+    #                                  fontsize=cfg.LEGEND_S, 
+    #                                  ha='center', va='top')
+    #             # remove the axes
+    #             ax_c.set_xlim(0, cat_cols[cat], auto=False)
+    #             ax_c.set_ylim(0, cat_r, auto=False)
+    #             ax_c.invert_yaxis()
+    #             ax_c.set_aspect('equal', adjustable='box', share=True)
+    #             ax_c.axis('off')
+    #             # set title
+    #             ax_c.set_title(str.capitalize(cat), 
+    #                            fontsize=cfg.TITLE_S, 
+    #                            y = 1.0, 
+    #                            verticalalignment= 'bottom', 
+    #                            pad=-cfg.TITLE_S)            
+    #         fig.suptitle(f'{self.spectra_obj.spectral_library} '+title_sfx, fontsize=cfg.TITLE_S)
+    #         fig.tight_layout()
+
+    #         # export page as pdf page
+    #         contact_sheet_dir=Path(self.project_dir,'contact_sheet')            
+    #         contact_sheet_dir.mkdir(parents=True, exist_ok=True)
+    #         filename = f'{self.spectra_obj.spectral_library} {conditions["label"]} page_{page}'
+    #         filepath=Path(contact_sheet_dir, filename).with_suffix('.pdf') # locked as PDF not PNG
+    #         plt.savefig(filepath, bbox_inches='tight', pad_inches = 0.1)
+
+    #         figs.append(fig)
+    #         axes.append(ax_c)
+        
+    #     return figs, axes
+
     def render_colour_contact_sheet(self,
             conditions: Dict,
             srgb_compare: Union[bool, object]=False
@@ -1817,122 +2071,3 @@ class SpectralLibraryAnalyser():
         fig.tight_layout()
         
         return figs_cs, axes_cs
-
-    # def render_colour(self,
-    #         conditions: str,
-    #         srgb_compare: Union[bool, object]=False) -> plt.figure:
-    #     """Render the colour of each spectrum in the spectral library according
-    #     to the given computed colour coordinates.
-
-    #     :param colour_obj: Colour object with tables of RGB, XYZ and xyY values
-    #     :type colour_obj: object, MaterialCollection or Observation
-    #     :param srgb_compare: Indicate if sRGB comparison is to be made,
-    #             defaults to False
-    #     :type srgb_compare: Union[bool, object], optional
-    #     :return: Table of colours for each spectrum, and figure of colours
-    #     :rtype: pd.DataFrame, plt.figure
-    #     """        
-    #     # load the spectral library        
-    #     index = self.spectra_obj.main_df.index
-
-    #     rgb = self.spectra_obj.colour_df[conditions][['R', 'G', 'B']].to_numpy()
-    #     xyY = self.spectra_obj.colour_df[conditions][['x', 'y', 'Y']].to_numpy()
-
-    #     cats = self.spectra_obj.main_df['Category'][index]
-        
-    #     title_sfx = conditions
-
-    #     # if compare, load the comparison material collection colour df
-    #     if srgb_compare and self.obj_type == 'observation':
-    #         srgb_obj = srgb_compare.material_collection
-    #         srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
-    #         srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
-    #         srgb_cats = srgb_obj.colour_df['Category']
-    #         title_sfx = f"sRGB vs. {title_sfx}"
-
-    #     # Plotting the RGB Cube
-    #     # make a 3D plot of rgb array
-    #     fig = plt.figure()
-    #     ax = fig.add_subplot(111, projection='3d')
-    #     ax.scatter(rgb[:,0], rgb[:,1], rgb[:,2], c=rgb, s=100, depthshade=True)
-    #     # ax.set_xlabel('R')
-    #     ax.tick_params(axis='x', colors='red')
-    #     # ax.set_ylabel('G')
-    #     ax.tick_params(axis='y', colors='green')
-    #     # ax.set_zlabel('B')
-    #     ax.tick_params(axis='z', colors='blue')
-    #     ax.set_xlim(0, 1)
-    #     ax.set_ylim(0, 1)
-    #     ax.set_zlim(0, 1)        
-    #     ax.set_title(f'{title_sfx} RGB Cube')
-    #     fig.tight_layout()
-    #     # export as pdf
-
-    #     # *** Plotting in chromaticity space ***
-
-    #     # TODO plot the comparison xyY coordinates, with annotations showing change
-        
-    #     uniq_cats = cats.unique()
-    #     fig, ax = colour.plotting.plot_chromaticity_diagram_CIE1931(
-    #         show=False, 
-    #         show_spectral_locus=True,
-    #         show_diagram_colours=True,
-    #         transparent_background=False,            
-    #         )
-        
-    #     # cat to integer
-    #     cat_codes = cats.astype('category').cat.codes
-    #     syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 
-    #                  'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
-
-    #     min_list = index.to_list()
-    #     for i, min in enumerate(min_list):
-           
-    #         sym = syms_list[cat_codes.loc[min]]
-    #         swatch_name = f"{min}".capitalize()
-                        
-    #         xy = xyY[i, 0:2]
-    #         x, y = xy
-    #         ax.plot(x, y, 
-    #                 f"{sym}", color=list(rgb[i]), 
-    #                 label=swatch_name, 
-    #                 markeredgewidth=0.5,
-    #                 markeredgecolor='white', markersize=4)
-        
-    #     # plot the sRGB space in the chromaticity diagram
-    #     sRGB_ps = colour.RGB_COLOURSPACES['sRGB'].primaries
-    #     ax.plot(sRGB_ps[:,0],sRGB_ps[:,1], color='k', marker='', label='sRGB')
-    #     ax.plot(sRGB_ps[[2,0],0],sRGB_ps[[2,0],1], color='k', marker='') 
-
-    #     # if number of entries is >20, just add legend for categories, as a white symbol
-    #     handles, labels = ax.get_legend_handles_labels()
-
-    #     if len(labels) > 20:
-    #         labels = uniq_cats.categories.to_list()
-    #         # set the handle to the category symbol
-    #         handles = [mpl.lines.Line2D([0], [0], 
-    #                             color='w', markeredgecolor='k', 
-    #                             marker=syms_list[i], markersize=6, 
-    #                             label=uniq_cats.categories.to_list()[i]) for i in np.arange(len(uniq_cats))]
-
-    #     else:
-    #         # insert category labels into the legend        
-    #         for cat in uniq_cats:
-    #             cat_index = cats[cats == cat].index
-    #             cat_index = labels.index(cat_index[0])
-    #             labels.insert(cat_index, cat)
-    #             handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
-    #                                 color='w', marker='o', markersize=6, label=cat))
-        
-    #     ax.legend(handles, labels, loc='upper right', fontsize='x-small')
-        
-    #     fig.suptitle(f'{title_sfx}', fontsize='large')
-
-    #     # set figure size
-    #     fig.set_size_inches(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1])   
-    #     # set DPI
-    #     fig.set_dpi(cfg.DPI)
-
-    #     fig.tight_layout()  
-        
-    #     return fig

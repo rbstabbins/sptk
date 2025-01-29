@@ -102,6 +102,7 @@ class SpectralLibraryAnalyser():
         ax = self.render_profile_plot(all_df,
                     scope=scope,
                     with_noise=with_noise,
+                    hires_under=hires_under,
                     ci=ci)
         axes = [ax]
         if categories_only:
@@ -264,11 +265,18 @@ class SpectralLibraryAnalyser():
             else:                
                 title = f'{self.spectra_obj.instrument.name} {Cat} {Mnrl}'
             if hires_under:
-                refl_df = self.spectra_obj.material_collection.get_refl_df(category=cat,
-                                                            mineral_name=mnrl)
-                hires_df = refl_df.reset_index()
+                if cat != 'all':
+                    refl_df = self.spectra_obj.material_collection.get_refl_df(category=cat,
+                                                                mineral_name=mnrl)
+                    cat_df = self.spectra_obj.material_collection.get_cat_df(category=cat,
+                                                                mineral_name=mnrl)
+                else:
+                    refl_df = self.spectra_obj.material_collection.get_refl_df()
+                    cat_df = self.spectra_obj.material_collection.get_cat_df()
+                hires_df = pd.concat([refl_df, cat_df], axis=1)
+                hires_df = hires_df.reset_index()
                 # long form version of plotting, to aggregate data
-                hires_df =pd.melt(hires_df, id_vars=['Data ID'])
+                hires_df =pd.melt(hires_df, id_vars=['Data ID', 'Category'])
                 sns.lineplot(
                     data=hires_df,
                     x='variable',
@@ -1517,17 +1525,20 @@ class SpectralLibraryAnalyser():
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
         uniq_cats = cats.unique()
+        cat_codes = cats.astype('category').cat.codes
+        cat_codes.index = cats.values
         syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
                         'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
         for i, cat in enumerate(uniq_cats):
             cat_rgb = rgb[cats == cat]
             # plot each point in turn to give separate colour
+            sym = syms_list[cat_codes.loc[cat].unique()[0]]
             for e in range(cat_rgb.shape[0]):
                 mrkr, stem, base = ax.stem([cat_rgb[e,2]], 
                                             [cat_rgb[e,0]], 
                                             [cat_rgb[e,1]], 
                                             label=cat, 
-                                            markerfmt=syms_list[i])                
+                                            markerfmt=sym)                
                 mrkr.set_markerfacecolor(cat_rgb[e,:])
                 mrkr.set_markeredgecolor(cat_rgb[e,:])
                 stem.set_color(cat_rgb[e,:])                
@@ -1577,15 +1588,18 @@ class SpectralLibraryAnalyser():
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
         uniq_cats = cats.unique()
+        cat_codes = cats.astype('category').cat.codes
+        cat_codes.index = cats.values
         syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
                         'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
         for i, cat in enumerate(uniq_cats):
             cat_XYZ = XYZ[cats == cat]
             cat_rgb = rgb[cats == cat]
+            sym = syms_list[cat_codes.loc[cat].unique()[0]]
             ax.scatter(cat_XYZ[:,0], cat_XYZ[:,1], cat_XYZ[:,2], 
                         c=cat_rgb, 
                         depthshade=True, 
-                        marker=syms_list[i], 
+                        marker=sym, 
                         alpha=0.9,
                         label=cat)
         ax.set_xlabel('X', fontsize=cfg.LEGEND_S)
@@ -1633,13 +1647,16 @@ class SpectralLibraryAnalyser():
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
         uniq_cats = cats.unique()
+        cat_codes = cats.astype('category').cat.codes
+        cat_codes.index = cats.values
         syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
                         'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
         for i, cat in enumerate(uniq_cats):
             cat_xyY = xyY[cats == cat]
             cat_rgb = rgb[cats == cat]
+            sym = syms_list[cat_codes.loc[cat].unique()[0]]
             for e in range(cat_xyY.shape[0]):
-                markerline, stemlines, baseline = ax.stem([cat_xyY[e,0]], [cat_xyY[e,1]], [cat_xyY[e,2]], label=cat, markerfmt=syms_list[i])                
+                markerline, stemlines, baseline = ax.stem([cat_xyY[e,0]], [cat_xyY[e,1]], [cat_xyY[e,2]], label=cat, markerfmt=sym)                
                 markerline.set_markerfacecolor(cat_rgb[e,:])
                 markerline.set_markeredgecolor(cat_rgb[e,:])
                 stemlines.set_color(cat_rgb[e,:])                
@@ -1746,7 +1763,7 @@ class SpectralLibraryAnalyser():
                 handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
                                     color='w', marker='o', markersize=6, label=cat))
         
-        ax.legend(handles, labels, loc='upper right', fontsize='x-small')
+        ax.legend(handles, labels, loc='upper right', fontsize=cfg.LEGEND_S-2)
         
         # set axes font sizes
         ax.set_xlabel('CIE $x$', fontsize=cfg.LABEL_S)
@@ -1763,7 +1780,7 @@ class SpectralLibraryAnalyser():
         ax.set_title(f'{title_sfx}\n CIE 1931 Chromaticity Diagram', fontsize=cfg.LABEL_S)
 
         # set figure size
-        fig.set_size_inches(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+        fig.set_size_inches(1.5*cfg.FIG_SIZE[0], 1.5*cfg.FIG_SIZE[1])
 
         # set DPI
         fig.set_dpi(cfg.DPI)
@@ -1799,13 +1816,16 @@ class SpectralLibraryAnalyser():
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
         uniq_cats = cats.unique()
+        cat_codes = cats.astype('category').cat.codes
+        cat_codes.index = cats.values
         syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
                         'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
         for i, cat in enumerate(uniq_cats):
             cat_Lab = Lab[cats == cat]
             cat_rgb = rgb[cats == cat]
+            sym = syms_list[cat_codes.loc[cat].unique()[0]]
             for e in range(cat_Lab.shape[0]):
-                markerline, stemlines, baseline = ax.stem([cat_Lab[e,1]], [cat_Lab[e,2]], [cat_Lab[e,0]], label=cat, markerfmt=syms_list[i])                
+                markerline, stemlines, baseline = ax.stem([cat_Lab[e,1]], [cat_Lab[e,2]], [cat_Lab[e,0]], label=cat, markerfmt=sym)                
                 markerline.set_markerfacecolor(cat_rgb[e,:])
                 markerline.set_markeredgecolor(cat_rgb[e,:])
                 stemlines.set_color(cat_rgb[e,:])                
@@ -1880,6 +1900,8 @@ class SpectralLibraryAnalyser():
         # separately plot each catgeory with a different marker
         cats = self.spectra_obj.main_df['Category'][index]
         uniq_cats = cats.unique()
+        cat_codes = cats.astype('category').cat.codes
+        cat_codes.index = cats.values
         syms_list = ['o', 's', 'D', 'v', '^', '<', '>',
                         'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
         
@@ -1925,9 +1947,10 @@ class SpectralLibraryAnalyser():
         for i, cat in enumerate(uniq_cats):
             cat_LCh = LCh[cats == cat]
             cat_rgb = rgb[cats == cat]
+            sym = syms_list[cat_codes.loc[cat].unique()[0]]
             ax.scatter(np.deg2rad(cat_LCh[:,2]), cat_LCh[:,1], 
                         c=cat_rgb,
-                        marker=syms_list[i], label=cat)
+                        marker=sym, label=cat)
             ax.set_rmax(100)  
             # set radial axis font size
             ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
@@ -2040,7 +2063,7 @@ class SpectralLibraryAnalyser():
                 show_spectral_locus=False,
                 show_diagram_colours=True,
                 transparent_background=False,            
-                figsize=(cfg.FIG_SIZE[0], cfg.FIG_SIZE[1]),
+                figsize=(1.5*cfg.FIG_SIZE[0], 1.5*cfg.FIG_SIZE[1]),
                 dpi=cfg.DPI,
                 axes=ax
                 )

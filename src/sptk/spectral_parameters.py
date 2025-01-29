@@ -15,6 +15,7 @@ from  shutil import rmtree
 import time
 from typing import List, Tuple, Literal
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -659,7 +660,14 @@ class SpectralParameters():
         """
         # Get the chnl data and reorganise to 3 columns:
         # Category, Spectral Parameter, Value
-        chnl_df = self.main_df[self.chnl_lbls + ['Category']]
+
+        # check for and handle multiindex
+        if isinstance(self.main_df.columns, pd.MultiIndex):
+            sp_df = self.main_df['Spectral Parameters'][self.chnl_lbls]
+            cat_df = self.main_df['Header']['Category']
+            chnl_df = pd.concat([cat_df, sp_df], axis=1)
+        else:
+            chnl_df = self.main_df[self.chnl_lbls + ['Category']]
         chnl_df = chnl_df.reset_index(drop=True)
         chnl_df_mlt = pd.melt(chnl_df,
                               id_vars='Category', var_name='spectral_parameter')
@@ -701,7 +709,13 @@ class SpectralParameters():
         """
         # Get the Ratio data and reorganise to 3 columns:
         # Category, Spectral Parameter, Value
-        ratio_df = self.main_df[self.ratio_lbls + ['Category']]
+        # check for and handle multiindex
+        if isinstance(self.main_df.columns, pd.MultiIndex):
+            sp_df = self.main_df['Spectral Parameters'][self.ratio_lbls]
+            cat_df = self.main_df['Header']['Category']
+            ratio_df = pd.concat([cat_df, sp_df], axis=1)
+        else:
+            ratio_df = self.main_df[self.ratio_lbls + ['Category']]
         ratio_df = ratio_df.reset_index(drop=True)
         ratio_df_mlt = pd.melt(
             ratio_df, id_vars='Category', var_name='spectral_parameter')   
@@ -748,7 +762,13 @@ class SpectralParameters():
         """
         # Get the Slope data and reorganise to 3 columns:
         # Category, Spectral Parameter, Value
-        slope_df = self.main_df[self.slope_lbls + ['Category']]
+        # check for and handle multiindex
+        if isinstance(self.main_df.columns, pd.MultiIndex):
+            sp_df = self.main_df['Spectral Parameters'][self.slope_lbls]
+            cat_df = self.main_df['Header']['Category']
+            slope_df = pd.concat([cat_df, sp_df], axis=1)
+        else:
+            slope_df = self.main_df[self.slope_lbls + ['Category']]
         slope_df = slope_df.reset_index(drop=True)
         slope_df_mlt = pd.melt(
             slope_df, id_vars='Category', var_name='spectral_parameter')
@@ -803,7 +823,15 @@ class SpectralParameters():
             ce_wvl_band_depths = bd_lbls[ce_wvls==ce_wvl]
             # Get the data and reorganise to 3 columns:
             # Category, Spectral Parameter, Value
-            bd_df = self.main_df[ce_wvl_band_depths.tolist() + ['Category']]
+        
+            # check for and handle multiindex
+            if isinstance(self.main_df.columns, pd.MultiIndex):
+                sp_df = self.main_df['Spectral Parameters'][ce_wvl_band_depths.tolist()]
+                cat_df = self.main_df['Header']['Category']
+                bd_df = pd.concat([cat_df, sp_df], axis=1)
+            else:
+                bd_df = self.main_df[ce_wvl_band_depths.tolist() + ['Category']]
+
             bd_df = bd_df.reset_index(drop=True)
             bd_df_mlt = pd.melt(
                 bd_df, id_vars='Category', var_name='spectral_parameter')
@@ -861,7 +889,15 @@ class SpectralParameters():
             ce_wvl_shoulder_heights = sh_lbls[ce_wvls==ce_wvl]
             # Get the data and reorganise to 3 columns:
             # Category, Spectral Parameter, Value
-            sh_df = self.main_df[ce_wvl_shoulder_heights.tolist()+['Category']]
+
+            # check for and handle multiindex
+            if isinstance(self.main_df.columns, pd.MultiIndex):
+                sp_df = self.main_df['Spectral Parameters'][ce_wvl_shoulder_heights.tolist()]
+                cat_df = self.main_df['Header']['Category']
+                sh_df = pd.concat([cat_df, sp_df], axis=1)
+            else:
+                sh_df = self.main_df[ce_wvl_shoulder_heights.tolist() + ['Category']]
+
             sh_df = sh_df.reset_index(drop=True)
             sh_df_mlt = pd.melt(sh_df, id_vars='Category',
                                 var_name='spectral_parameter')
@@ -902,13 +938,11 @@ class SpectralParameters():
                             'shoulder_height_'+ce_wvl).with_suffix('.pdf')
             plt.savefig(output_file,bbox_inches='tight')
 
-    def colormap_gridplot(self):
+    def colormap_gridplot(self,
+                          include_colourspace: bool = False,
+                          snr: bool = False):
 
         sp_types = SP_CODES.keys() # get the SP types
-
-        # set the plot vertical-horizontal ratios for each SP type
-        ratios = [len(self.parse_sp_lbls(self.sp_list, sp_type)) 
-                                    for i, sp_type in enumerate(sp_types)]
 
         # define colormaps used to show distributions spectral parameter values
         sp_cmaps = {
@@ -918,31 +952,76 @@ class SpectralParameters():
             'band_depth': 'RdBu',
             'shoulder_height': 'RdBu'
         }
+        
+        # average over mineral name - should be optional
+        # check for multiindex
+        if snr:
+            if isinstance(self.main_df.columns, pd.MultiIndex):
+                min_list = self.main_df.groupby(('Header', 'Mineral Name')).mean(numeric_only=True).index
+            else:
+                min_list = self.main_df.groupby('Mineral Name').mean(numeric_only=True).index
+        else:    
+            if isinstance(self.main_df.columns, pd.MultiIndex):
+                min_list = self.main_df.index#groupby(('Header', 'Mineral Name')).mean(numeric_only=True).index
+            else:
+                min_list = self.main_df.index#.groupby('Mineral Name').mean(numeric_only=True).index
+        # # sort min_list
+        # short_mnrl_list = [mnrl.split('.')[0] for mnrl in min_list]
+        # # reapply this as the new index
+        # lut = pd.Series(data=min_list, index=short_mnrl_list)
+        
+        # sort_mnrl_list = sorted(short_mnrl_list, key = lambda sub : sub[-2:-1])
+        # sorted_index = lut[sort_mnrl_list]
 
-        # min_list = self.main_df['Mineral Name'].unique()
-        min_list = self.main_df.index
-
+        # min_list = sorted_index.values
+        
         height = 2 + (20 + len(min_list)) * cfg.LABEL_S / 72.0 # height of axis in inches, from number of minerals plus padding for SP labels
         
-        width = len(sp_types)*0.2 + (15 + np.array(ratios).sum()) * cfg.LABEL_S / 72.0
+        # set the plot vertical-horizontal ratios for each SP type
+        ratios = [len(self.parse_sp_lbls(self.sp_list, sp_type)) 
+                                    for i, sp_type in enumerate(sp_types)]
 
-        fig, ax = plt.subplots(1,len(sp_types),
+        # check for colourspace list
+        if include_colourspace and hasattr(self, 'colourspace_list'):
+            col_types = self.colourspace_list.copy()
+            # insert at beginning of list natural colour space from hi-res
+            col_types = col_types.insert(0, 'CIE 1964 10 Degree Standard Observer D65')
+            # add to ratios
+            ratios.append(len(col_types))
+
+        width = len(ratios)*0.2 + (15 + np.array(ratios).sum()) * cfg.LABEL_S / 72.0
+
+        fig, ax = plt.subplots(1,len(ratios),
                                figsize=(width, height),
                                sharey=True,
                                width_ratios=ratios,                               
                                dpi=cfg.DPI)
-        
         
         # draw coloured gridplots for each SP type
         for i, sp_type in enumerate(sp_types):
             sp_type_list = self.parse_sp_lbls(self.sp_list, sp_type)
             
             # average over mineral name - should be optional
-            sps_arr = self.main_df #.groupby('Mineral Name').mean(numeric_only=True)            
-            sps_arr = sps_arr[sp_type_list].to_numpy()
+            # check for multiindex
+            if snr:
+                if isinstance(self.main_df.columns, pd.MultiIndex):
+                    sps_arr = self.main_df.groupby(('Header', 'Mineral Name')).mean(numeric_only=True)['Spectral Parameters']
+                    std_arr = self.main_df.groupby(('Header', 'Mineral Name')).std(numeric_only=True)['Spectral Parameters']
+                else:
+                    sps_arr = self.main_df.groupby('Mineral Name').mean(numeric_only=True)           
+                    std_arr = self.main_df.groupby('Mineral Name').std(numeric_only=True)
+                sps_arr = sps_arr[sp_type_list].to_numpy() / std_arr[sp_type_list].to_numpy()
+                sps_arr = 20*np.log10(np.abs(sps_arr))
+            else:    
+                if isinstance(self.main_df.columns, pd.MultiIndex):
+                    sps_arr = self.main_df['Spectral Parameters']#.groupby(('Header', 'Mineral Name')).mean(numeric_only=True)['Spectral Parameters']
+                else:
+                    sps_arr = self.main_df['Spectral Parameters']#.groupby('Mineral Name').mean(numeric_only=True)            
+                sps_arr = sps_arr[sp_type_list].loc[min_list].to_numpy()
+                # sps_arr = sps_arr[sp_type_list].to_numpy()
 
-            #if ratio, take log10
-            if sp_type == 'ratio':
+            #if ratio, take log10   
+            if sp_type == 'ratio' and not snr:
                 sps_arr = np.log10(sps_arr)
                 sp_type = 'log10('+sp_type+')'
 
@@ -950,15 +1029,24 @@ class SpectralParameters():
             vmax=np.nanmax(sps_arr)
             vmin=np.nanmin(sps_arr)
 
-            vmax = np.nanmax([vmax, -vmin])
-            if sp_type == 'channel':
-                vmin=0.0            
+            if not snr:
+                vmax = np.nanmax([vmax, -vmin])
+                if sp_type == 'channel':
+                    vmin=0.0            
+                else:
+                    vmin = -vmax
             else:
                 vmin = -vmax
             # define colour bar
+
+            if not snr:
+                cmap = sp_cmaps[sp_type]
+            else:
+                cmap = 'RdYlGn'
+
             cax = ax[i].pcolor(sps_arr, 
                                edgecolors='k', 
-                               cmap=sp_cmaps[sp_type], 
+                               cmap=cmap, 
                                vmin=vmin, vmax=vmax)
             
             # format coloured gridplot
@@ -975,10 +1063,62 @@ class SpectralParameters():
                                 location='top',                                 
                                 pad=0.02,                          
                                 aspect=len(sp_type_list))
+            if snr:
+                sp_type_label = sp_type_label + '\n SNR (dB)' 
             cbar.set_label(sp_type_label, fontsize=cfg.LEGEND_S)
             cbar.ax.tick_params(labelrotation=45, 
                                 direction='out',
                                 labelsize=cfg.LEGEND_S)
 
+        # if there are colourspaces in the main_df, then add these
+        # check if the self.colourspace_list has been populated
+        i+=1
+        if include_colourspace and hasattr(self, 'colourspace_list'):
+
+            # min_list = self.material_collection.colour_df.index
+            # add the colourspace to the plot
+            col_img = np.zeros((len(min_list), len(col_types), 3))
+
+            for c, col_type in enumerate(col_types):
+                if c == 0:
+                    col_arr = self.material_collection.colour_df[col_type].loc[min_list][['R', 'G', 'B']].to_numpy()
+                else:
+                    col_arr = self.main_df[col_type].loc[min_list][['R', 'G', 'B']].to_numpy()
+                col_img[:, c, :] = col_arr
+        
+            # ensure imshow plot is aligned with the pcolor plots above
+            cax = ax[i].imshow(col_img, 
+                               interpolation='none', 
+                               origin='lower',
+                               extent=[0, len(col_types), 0, len(min_list)]
+                               )
+            # format coloured gridplot
+            # align top with previous subplot            
+            ax[i].set_xticks(np.arange(len(col_types)), minor=False)
+            # replace the "CIE 1964 10 Degree Standard Observer D65" labels with sRGB
+            replace_dict = {'CIE 1964 10 Degree Standard Observer D65': 'sRGB',
+                            'CaSSIS-2019 CIE 1964 10 Degree Standard Observer D65': 'CaSSIS-2019 Approx. sRGB'}
+            col_types = [replace_dict.get(col, col) for col in col_types]
+            ax[i].set_xticklabels(col_types, rotation=90, ha='left', fontsize=cfg.LABEL_S, va='top')
+            # ax[i].set_yticks(np.arange(len(min_list)), minor=False)
+            # min_labels = [min.replace('_', ' ').title().capitalize() for min in min_list]
+            # min_labels = [min.replace(' ', '\n').title().capitalize() for min in min_list]
+            # ax[i].set_yticklabels(min_labels, fontsize=cfg.LABEL_S, va='baseline')                        
+            ax[i].set_aspect('equal')
+            # add gridlines
+            ax[i].grid(which='major', color='k', linestyle='-', linewidth=.5)
+            # set title
+            cmap = mpl.cm.hsv
+            norm = mpl.colors.Normalize(vmin=0, vmax=1)
+            
+            cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax[i], 
+                                location='top',                                 
+                                pad=0.02,                          
+                                aspect=len(col_types))
+            cbar.set_label('Colour', fontsize=cfg.LEGEND_S)
+            # remove ticks and labels
+            cbar.ax.xaxis.set_ticks_position('none')
+            cbar.ax.set_xticklabels([])
+      
         # fig.suptitle(f'{self.instrument.name} Spectral Parameters')
         fig.tight_layout()

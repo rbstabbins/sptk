@@ -41,8 +41,7 @@ def envi_sli_formatter(file_name: Union[str, Path]):
     # parse into separate spectra
     sample_names = envi_hdr['spectra names']
     wvls = envi_hdr['wavelength'] # convert from microns to nanometers
-    if (envi_hdr['wavelength units'] == 'Micrometers') or 
-                                        (envi_hdr['wavelength units'] == 'um'):
+    if (envi_hdr['wavelength units'] == 'Micrometers') or (envi_hdr['wavelength units'] == 'um'):
         wvls = [float(x)*1000 for x in wvls] # convert to nm from um
         # TODO other conversions to nm
     for count, sample_name in enumerate(sample_names):
@@ -56,10 +55,10 @@ def envi_sli_formatter(file_name: Union[str, Path]):
         # TODO: need a new method for getting the Mineral Name out of the sample name
 
         # # get metadata
-        # sample_name = sample_name.replace('/', '-')
-        # mineral_name = sample_name.split(' ')[0].lower() # first string in sample name
-        # # replace '/' with '-'
-        # sample_id = sample_name.split(' ')[1] # second string in sample name
+        sample_name = sample_name.replace('/', '-')
+        mineral_name = 'shocked_anorthosite' #sample_name.split(' ')[0].lower() # first string in sample name
+        # replace '/' with '-'
+        sample_id = sample_name #.split(' ')[1] # second string in sample name
 
         # # get MICA CRISM ratioed metadata
         # sample_name = sample_name.replace('/', '-')

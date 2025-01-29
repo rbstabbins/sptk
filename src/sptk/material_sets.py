@@ -60,17 +60,13 @@ OXIA_PLANUM_SET = {
 
 # MICA files and categories
 MICA_SET = {
-    'iron oxides & primary silicates': [
+    'iron oxides & \n primary silicates': [
             ('hematite', '*'),
             ('forsterite', '*'),
             ('fayalite', '*'),
             ('plagioclase', '*'),
             ('orthopyroxene', '*'),
             ('pyroxene', '*')],
-    'ices': [
-        ('h2o-ice', '*'),
-        ('co2-ice', '*')
-    ],
     'sulfates': [
         ('kieserite', '*'),
         ('alunite', '*'),
@@ -94,7 +90,7 @@ MICA_SET = {
         ('magnesite', '*'),
         ('calcite', '*')
     ],
-    'hydrated silicates & halides': [
+    'hydrated silicates \n & halides': [
         ('hydrated-silica', '*'),
         ('halite_mica', '*'),
         ('epidote', '*'),

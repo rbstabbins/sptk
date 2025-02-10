@@ -195,6 +195,29 @@ class Instrument():
         return transmission.transpose()
 
     @staticmethod
+    def build_cauchy_filter(
+            cwl: Union[np.array, float],
+            fwhm: Union[np.array,float]) -> np.array:
+        """Build Gaussian filter profiles according to the given cwl, fwhm and
+        wvls, in parallel.
+
+        :param cwl: Centre wavelength(s) (nm)
+        :type cwl: np.array
+        :param fwhm: Full-Width at Half Maximum(s) (nm)
+        :type fwhm: np.array
+        :returns: table of Gaussian transmission profile data
+        :rtype: np.array
+        """
+        gamma = fwhm / 2 # convert from fwhm to 1-gamma (hwhm)
+        # vectorisation: extend cwls, sigs & wvls to match dimensions
+        cwls = np.tile(cwl, [cfg.WVLS.shape[0],1])
+        gammas = np.tile(gamma, [cfg.WVLS.shape[0],1])
+        wvls = np.tile(cfg.WVLS, [cwls.shape[1],1]).transpose()
+        # compute the Gaussian profiles in parallel
+        cauchy = np.divide((np.power(gammas, 2.)), (np.power(wvls - cwls, 2.) + (np.power(gammas, 2.))))
+        return cauchy.transpose()
+
+    @staticmethod
     def build_instrument_df(inst_df: pd.DataFrame, shape: str='gauss') -> pd.DataFrame:
         """Builds instrument transmission profiles for filter cwls and fwhms
         using a Gaussian function, and returns in a DataFrame.
@@ -216,6 +239,10 @@ class Instrument():
                 out = Instrument.build_gauss_filter(cwls, fwhms)
             elif shape == 'tophat':
                 out = Instrument.build_tophat_filter(cwls, fwhms) 
+            elif shape == 'cauchy':
+                out = Instrument.build_cauchy_filter(cwls, fwhms) 
+            else:
+                raise ValueError('Filter shape not recognised.')
             # initialise the dataframe according to contents
             init_df =pd.DataFrame(data=out,columns=cfg.WVLS,index=inst_df.index)
         else:
@@ -339,32 +366,32 @@ class Instrument():
             ybound=(-0.05,1.15),
             autoscale_on=False)
         
-        # set colours for the filters        
-        norm_trans = self.get_trans_df().T
-        sds = colour.MultiSpectralDistributions(norm_trans)    
-        # normalise the spds
-        # sds = sds / np.sum(sds, axis=1)[:,None]
+        # # set colours for the filters        
+        # norm_trans = self.get_trans_df().T
+        # sds = colour.MultiSpectralDistributions(norm_trans)    
+        # # normalise the spds
+        # # sds = sds / np.sum(sds, axis=1)[:,None]
             
-        illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
-        xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1.0)/100 # convert to XYZ space
-        # xyz = xyz / np.sum(xyz, axis=1)[:,None]
-        # xyz = xyz.clip(0,100) # clip to 0-1 range
-        rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB    
-        rgb = rgb.clip(0,1) # clip to 0-1 range
+        # illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
+        # xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1.0)/100 # convert to XYZ space
+        # # xyz = xyz / np.sum(xyz, axis=1)[:,None]
+        # # xyz = xyz.clip(0,100) # clip to 0-1 range
+        # rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB    
+        # rgb = rgb.clip(0,1) # clip to 0-1 range
             
-        # if np.any(rgb < 0):
-        #     # We're not in the RGB gamut: approximate by desaturating
-        #     w = - np.min(rgb, axis=0)
-        #     rgb = rgb + w
-        if not np.all(rgb==0):
-            # Normalize the rgb vector
-            rgb /= np.max(rgb)
+        # # if np.any(rgb < 0):
+        # #     # We're not in the RGB gamut: approximate by desaturating
+        # #     w = - np.min(rgb, axis=0)
+        # #     rgb = rgb + w
+        # if not np.all(rgb==0):
+        #     # Normalize the rgb vector
+        #     rgb /= np.max(rgb)
 
         # just do central wavelength to XYZ
         # xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
         # colour.plotting.plot_single_sd(sds[:,0])
 
-        cwl_colours = sns.color_palette(rgb)
+        # cwl_colours = sns.color_palette(rgb)
 
         sns.lineplot(
             data=trans_df,
@@ -372,7 +399,7 @@ class Instrument():
             y='value',
             ax=fltr_ax,
             hue='filter_id',
-            palette=cwl_colours,
+            # palette=cwl_colours,
             linewidth=0.6,
             legend="full")
         fltr_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
@@ -462,7 +489,9 @@ class InstrumentBuilder:
         self.resolution = resolution
         self.spectral_range = spectral_range
 
-    def build_instrument(self) -> None:
+        self.main_df = self.build_instrument()
+
+    def build_instrument(self) -> pd.DataFrame:
         """Builds the instrument table and exports to file
         """
         if self.instrument_type == 'filter-wheel':
@@ -474,6 +503,7 @@ class InstrumentBuilder:
         else:
             raise ValueError('Instrument Type not recognised.')
         self.export_instrument(inst_df)
+        return inst_df
 
     def generate_filter_band_table(self) -> pd.DataFrame:
         """For a Filter-Wheel type spectrometer,

@@ -478,9 +478,16 @@ class SpectralLibraryAnalyser():
         cbar = plt.colorbar(im, cax = cax, orientation='horizontal', shrink=0.5)
         cbar.set_label('Band Depth')
 
+        fig.tight_layout()
+
         # export
-        filepath=Path(self.project_dir,'spectrogram').with_suffix(cfg.PLT_FRMT)
-        plt.savefig(filepath, bbox_inches='tight', pad_inches = 0.1)
+        plt.rcParams['svg.fonttype'] = 'none'
+        filepath=Path(self.project_dir,'spectrogram').with_suffix('.svg')
+        fig.savefig(filepath, bbox_inches='tight', pad_inches = 0.1, format='svg')
+
+        plt.show()
+
+        return fig, ax
 
     def analyse_bands(self):
         """Find the centre-wavelengths, fwhms, depths and areas of distinct

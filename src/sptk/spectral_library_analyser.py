@@ -169,6 +169,19 @@ class SpectralLibraryAnalyser():
         """
 
         data_df = data_df.reset_index()
+
+        if cat == 'all':
+            # apply offsets to reflectance
+            # sort categories by alphabetical order
+            data_df = data_df.sort_values(by=['Category'], ascending=False)
+            # reset index
+            data_df = data_df.reset_index(drop=True)
+            # normalise data df data to first value
+            data_df[self.wvls] = (data_df[self.wvls].T / data_df[self.wvls[0]]).T
+            # add offset to reflectance
+            offset = data_df.index * 0.5
+            data_df[self.wvls] = (data_df[self.wvls].T + offset).T
+
         # long form version of plotting, to aggregate data
         data_df =pd.melt(data_df, id_vars=['Data ID','Category'])
 
@@ -188,10 +201,12 @@ class SpectralLibraryAnalyser():
         if cat != 'all':
             n_ids = len(data_df['Data ID'].unique())
             n_cols = -(-n_ids // 15)
+            n_rows = 1
         else:
-            n_cols = 1            
+            n_cols = 1       
+            n_rows = np.floor(data_df['value'].max()/3)          
         width_factor = 1 + 0.3 * n_cols
-        fig_size = (width_factor*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+        fig_size = (width_factor*cfg.FIG_SIZE[0], n_rows*cfg.FIG_SIZE[1])
         fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI)
         # y_max = max([1.0, data_df.value.max()])
 
@@ -203,7 +218,11 @@ class SpectralLibraryAnalyser():
         if self.obj_type == 'observation':
             marker_flag = True
         else:
-            marker_flag = False
+            marker_flag = False    
+
+        n_channels = len(data_df['variable'].unique())
+        if n_channels > 24:
+            marker_flag = False  
 
         if ci:            
             sns.lineplot(
@@ -213,7 +232,7 @@ class SpectralLibraryAnalyser():
                 hue=hue_flag,
                 style=hue_flag,
                 markeredgewidth=0.0,
-                markers=marker_flag,
+                markers=marker_flag,                
                 errorbar='sd',
                 lw=0.7,
                 ax=ax)
@@ -270,11 +289,25 @@ class SpectralLibraryAnalyser():
                                                                 mineral_name=mnrl)
                     cat_df = self.spectra_obj.material_collection.get_cat_df(category=cat,
                                                                 mineral_name=mnrl)
+                    hires_df = pd.concat([refl_df, cat_df], axis=1)
+                    hires_df = hires_df.reset_index()
                 else:
                     refl_df = self.spectra_obj.material_collection.get_refl_df()
                     cat_df = self.spectra_obj.material_collection.get_cat_df()
-                hires_df = pd.concat([refl_df, cat_df], axis=1)
-                hires_df = hires_df.reset_index()
+                    hires_df = pd.concat([refl_df, cat_df], axis=1)
+                    hires_df = hires_df.reset_index()
+                    # apply offsets to reflectance
+                    # sort categories by alphabetical order
+                    hires_df = hires_df.sort_values(by=['Category'], ascending=False)
+                    # reset index
+                    hires_df = hires_df.reset_index(drop=True)
+                    # normalise data df data to first value
+                    hires_df[self.spectra_obj.material_collection.wvls] = (hires_df[self.spectra_obj.material_collection.wvls].T / hires_df[self.spectra_obj.material_collection.wvls[0]]).T
+                    # add offset to reflectance
+                    offset = hires_df.index * 0.5
+                    hires_df[self.spectra_obj.material_collection.wvls] = (hires_df[self.spectra_obj.material_collection.wvls].T + offset).T
+                    # apply offset to reflectance
+
                 # long form version of plotting, to aggregate data
                 hires_df =pd.melt(hires_df, id_vars=['Data ID', 'Category'])
                 sns.lineplot(
@@ -308,6 +341,17 @@ class SpectralLibraryAnalyser():
         fig.savefig(output_file, bbox_inches='tight', pad_inches = 0)
 
         return ax
+
+    # def apply_offsets(self, data_df: pd.DataFrame) -> pd.DataFrame:
+    #     """Apply offsets to the reflectance data for plotting
+
+    #     :param data_df: The reflectance data
+    #     :type data_df: pd.DataFrame
+    #     :return: the offset reflectance data
+    #     :rtype: pd.DataFrame
+    #     """        
+    #     # make column of offsets, each by 0.1
+
 
     # """
     # Spectrogram Visualisation & Continuum Removal

@@ -521,7 +521,10 @@ class MaterialCollection():
         if self.allow_out_of_bounds:
             # log locations of NaN entries
             channel_mask = self.channel_mask(mat_refl, instrument)
-            mat_refl = np.nan_to_num(mat_refl)
+            # set NaN locations to last valid value  
+            for i in range(0, len(mat_refl)):
+                #  one line at a time version
+                mat_refl[i] = np.interp(self.wvls, self.wvls[~np.isnan(mat_refl[i])], mat_refl[i][~np.isnan(mat_refl[i])])
         # prepare instrument transmission for performing the sampling
         cam_trans = instrument.get_trans_df().T.to_numpy()
         # compute matrix mult. of reflectance against channel transmission

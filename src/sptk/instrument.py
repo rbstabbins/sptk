@@ -558,8 +558,9 @@ class InstrumentBuilder:
 
         wvl_lo = self.spectral_range[0]
         wvl_hi = self.spectral_range[1]
-        start_cwl = wvl_lo + (wvl_lo / self.resolution)
-        end_cwl = wvl_hi - (wvl_hi / self.resolution)
+
+        start_cwl = wvl_lo / (1 - 1/self.resolution)
+        end_cwl = wvl_hi / (1 + 1/self.resolution)
 
         if self.sampling == 'nyquist':
             fwhm_si = 0.5

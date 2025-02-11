@@ -581,8 +581,7 @@ class InstrumentBuilder:
             fwhms.append(fwhm)
             filter_id = f'S{i:03d}'
             filter_ids.append(filter_id)
-            cwl = cwl + (fwhm * fwhm_si)
-            i+=1
+            cwl = cwl + (fwhm * fwhm_si)            
         inst_df = pd.DataFrame(data={
                                     'filter_id':filter_ids,
                                     'cwl': cwls,

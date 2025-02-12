@@ -819,11 +819,17 @@ class MaterialCollection():
             print(f"Material Collection exported in {toc - tic:0.4f} seconds.")
 
 
-    def plot_profiles(self, categories_only: bool=False, ci: bool=False) -> plt.Axes:
+    def plot_profiles(self, 
+                      stacked: bool=False,
+                      categories_only: bool=False, 
+                      ci: bool=False) -> plt.Axes:
         """Plot the profiles of the materials
         """
         plotter = SpectralLibraryAnalyser(self)
-        axes = plotter.plot_profiles(categories_only=categories_only, ci=ci)
+        axes = plotter.plot_profiles(
+                            stacked=stacked,
+                            categories_only=categories_only, 
+                            ci=ci)
         return axes
     
     def render_colour(self, 

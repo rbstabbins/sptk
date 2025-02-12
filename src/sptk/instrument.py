@@ -559,8 +559,10 @@ class InstrumentBuilder:
         wvl_lo = self.spectral_range[0]
         wvl_hi = self.spectral_range[1]
 
-        start_cwl = wvl_lo / (1 - 1/self.resolution)
-        end_cwl = wvl_hi / (1 + 1/self.resolution)
+        # start_cwl = wvl_lo / (1 - 1/self.resolution)
+        # end_cwl = wvl_hi / (1 + 1/self.resolution)
+        start_cwl = wvl_lo
+        end_cwl = wvl_hi
 
         if self.sampling == 'nyquist':
             fwhm_si = 0.5
@@ -581,7 +583,8 @@ class InstrumentBuilder:
             fwhms.append(fwhm)
             filter_id = f'S{i:03d}'
             filter_ids.append(filter_id)
-            cwl = cwl + (fwhm * fwhm_si)            
+            cwl = cwl + (fwhm * fwhm_si)     
+            i+=1       
         inst_df = pd.DataFrame(data={
                                     'filter_id':filter_ids,
                                     'cwl': cwls,

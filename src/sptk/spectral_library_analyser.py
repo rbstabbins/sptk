@@ -79,10 +79,11 @@ class SpectralLibraryAnalyser():
             self.band_info = pd.DataFrame()
 
     def plot_profiles(self,
-            with_noise: bool=False,
-            scope: str='all',
+            stacked: bool=False,
             categories_only: bool=False,
             ci: bool=False,
+            with_noise: bool=False,
+            scope: str='all',
             hires_under: bool=False,
             out_dir: Union[bool, str]=False
             ) -> plt.Axes:
@@ -100,6 +101,7 @@ class SpectralLibraryAnalyser():
         all_df = pd.concat([refl_df, cat_df], axis=1)
         
         ax = self.render_profile_plot(all_df,
+                    stacked=stacked,
                     scope=scope,
                     with_noise=with_noise,
                     hires_under=hires_under,
@@ -121,9 +123,10 @@ class SpectralLibraryAnalyser():
                 cat_df = self.spectra_obj.get_cat_df(category=cat,
                                                             mineral_name=mnrl)
                 cat_mnrl_df = pd.concat([refl_df, cat_df], axis=1)
-                ax = self.render_profile_plot(cat_mnrl_df,
+                ax = self.render_profile_plot(cat_mnrl_df,                                              
                             cat=cat,
                             mnrl=mnrl,
+                            stacked=stacked,
                             scope=scope,
                             with_noise=with_noise,
                             ci=ci,
@@ -139,10 +142,53 @@ class SpectralLibraryAnalyser():
 
         return axes
 
+    @staticmethod
+    def stack_spectra(data_df: pd.DataFrame, wvls: List, offset: pd.Series=None) -> pd.DataFrame:
+        """Stack the spectra of the dataframe for plotting.
+
+        :param data_df: Reflectance data to be stacked
+        :type data_df: pd.DataFrame
+        :return: Stacked Reflectance data
+        :rtype: pd.DataFrame
+        """        
+        # apply offsets to reflectance
+
+        # sort categories by alphabetical order
+        data_df = data_df.sort_values(by=['Category', 'Data ID'], ascending=True)
+        
+        # reset index
+        data_df = data_df.reset_index(drop=True)
+        
+        if offset is None:
+            # get minima
+            minima = data_df[wvls].min(axis=1)
+            maxima = data_df[wvls].max(axis=1)
+            range = maxima - minima
+            max_range = (range).max()
+
+            # add offset to reflectance
+            # stack so that minima of each spectra == maxima + 0.2 of spectra below
+            # offset = data_df[wvls].max(axis=1) + 0.4
+            # offset = offset.cumsum().shift(fill_value=0.0) # use shift to set first offset == 0
+            offset = data_df.index * max_range - range/2 - minima
+    
+        data_df[wvls] = (data_df[wvls].T + offset).T
+
+        # get the last finite reflectance value of each row
+        idx = data_df.index
+        level = data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])
+        # level = offset + max_range/2
+        label = data_df['Data ID']
+
+        annotation = (idx, level, label)
+
+        return data_df, offset, annotation
+
     def render_profile_plot(self,
             data_df: pd.DataFrame,
             cat: str='all',
             mnrl: str='entries',
+            stacked: bool=False,
             ci: bool=False,
             scope: str='all',
             with_noise: bool=False,
@@ -170,18 +216,9 @@ class SpectralLibraryAnalyser():
 
         data_df = data_df.reset_index()
 
-        if cat == 'all':
-            # apply offsets to reflectance
-            # sort categories by alphabetical order
-            data_df = data_df.sort_values(by=['Category'], ascending=False)
-            # reset index
-            data_df = data_df.reset_index(drop=True)
-            # normalise data df data to first value
-            data_df[self.wvls] = (data_df[self.wvls].T / data_df[self.wvls[0]]).T
-            # add offset to reflectance
-            offset = data_df.index * 0.5
-            data_df[self.wvls] = (data_df[self.wvls].T + offset).T
-
+        if stacked:
+            data_df, offset, annotation = SpectralLibraryAnalyser.stack_spectra(data_df, self.wvls)
+            
         # long form version of plotting, to aggregate data
         data_df =pd.melt(data_df, id_vars=['Data ID','Category'])
 
@@ -203,9 +240,14 @@ class SpectralLibraryAnalyser():
             n_cols = -(-n_ids // 15)
             n_rows = 1
         else:
-            n_cols = 1       
-            n_rows = np.floor(data_df['value'].max()/3)          
+            n_cols = 1  
+            n_rows = 1
         width_factor = 1 + 0.3 * n_cols
+        if stacked:
+            # stretch the vertical axis of the plot
+            n_rows = np.floor(data_df['value'].max()/5)        
+            width_factor = width_factor * 1.2
+
         fig_size = (width_factor*cfg.FIG_SIZE[0], n_rows*cfg.FIG_SIZE[1])
         fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI)
         # y_max = max([1.0, data_df.value.max()])
@@ -251,7 +293,12 @@ class SpectralLibraryAnalyser():
 
         ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)')
-        ax.set_ylabel('Reflectance')
+
+        if stacked:
+            ax.set_ylabel('Stacked Reflectance')
+        else:
+            ax.set_ylabel('Reflectance')
+
         # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
         # or minor at 100 and major at 500, depending on spectral range
         spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
@@ -264,19 +311,40 @@ class SpectralLibraryAnalyser():
         else:
             ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
             ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
-        ax.grid(True, which='major',axis='both', lw=0.6)
-        ax.grid(True, which='minor',axis='both', lw=0.3)
+        if stacked:
+            ax.grid(True, which='major',axis='x', lw=0.6)
+            ax.grid(True, which='minor',axis='x', lw=0.3)
+        else:
+            ax.grid(True, which='major',axis='both', lw=0.6)
+            ax.grid(True, which='minor',axis='both', lw=0.3)
 
-        ax.legend(loc="center left", 
-                  fontsize=cfg.LEGEND_S, 
-                  bbox_to_anchor=(1.02, 0.5),
-                  ncol=n_cols
-                  )
+        # TODO review legend - if stacked, might be better to annotate
+        if not stacked:
+            ax.legend(loc="center left", 
+                    fontsize=cfg.LEGEND_S, 
+                    bbox_to_anchor=(1.02, 0.5),
+                    ncol=n_cols
+                    )
+        else:
+            ax.legend(loc="upper left", 
+                    fontsize=cfg.LEGEND_S, 
+                    bbox_to_anchor=(1.02, 1.0),
+                    ncol=n_cols
+                    )
+
+        if stacked:
+            # despine the plot
+            sns.despine(ax=ax, right=True, top=True)
+            # annotate the spectra with the Data ID
+            for idx in annotation[0]:
+                ax.text(cfg.SAMPLE_RES['wvl_max']+20, annotation[1][idx], annotation[2][idx], fontsize=cfg.LEGEND_S, va='center') 
+        
 
         # plot title
         Cat = cat.capitalize()
         Mnrl = mnrl.capitalize()
         project_str = self.spectra_obj.project_name.replace('_', ' ')
+
         if self.obj_type == 'observation':
             leg_title = f'Class: {Cat}, Group: {mnrl} ({scope} data) - sampled'
             if ci:
@@ -284,29 +352,20 @@ class SpectralLibraryAnalyser():
             else:                
                 title = f'{self.spectra_obj.instrument.name} {Cat} {Mnrl}'
             if hires_under:
+                matcol = self.spectra_obj.material_collection
                 if cat != 'all':
-                    refl_df = self.spectra_obj.material_collection.get_refl_df(category=cat,
+                    refl_df = matcol.get_refl_df(category=cat,
                                                                 mineral_name=mnrl)
-                    cat_df = self.spectra_obj.material_collection.get_cat_df(category=cat,
+                    cat_df = matcol.get_cat_df(category=cat,
                                                                 mineral_name=mnrl)
-                    hires_df = pd.concat([refl_df, cat_df], axis=1)
-                    hires_df = hires_df.reset_index()
                 else:
-                    refl_df = self.spectra_obj.material_collection.get_refl_df()
-                    cat_df = self.spectra_obj.material_collection.get_cat_df()
-                    hires_df = pd.concat([refl_df, cat_df], axis=1)
-                    hires_df = hires_df.reset_index()
-                    # apply offsets to reflectance
-                    # sort categories by alphabetical order
-                    hires_df = hires_df.sort_values(by=['Category'], ascending=False)
-                    # reset index
-                    hires_df = hires_df.reset_index(drop=True)
-                    # normalise data df data to first value
-                    hires_df[self.spectra_obj.material_collection.wvls] = (hires_df[self.spectra_obj.material_collection.wvls].T / hires_df[self.spectra_obj.material_collection.wvls[0]]).T
-                    # add offset to reflectance
-                    offset = hires_df.index * 0.5
-                    hires_df[self.spectra_obj.material_collection.wvls] = (hires_df[self.spectra_obj.material_collection.wvls].T + offset).T
-                    # apply offset to reflectance
+                    refl_df = matcol.get_refl_df()
+                    cat_df = matcol.get_cat_df()
+                hires_df = pd.concat([refl_df, cat_df], axis=1)
+                hires_df = hires_df.reset_index()
+
+                if stacked:
+                    hires_df, _, _ = SpectralLibraryAnalyser.stack_spectra(hires_df, matcol.wvls, offset=offset)
 
                 # long form version of plotting, to aggregate data
                 hires_df =pd.melt(hires_df, id_vars=['Data ID', 'Category'])
@@ -337,8 +396,15 @@ class SpectralLibraryAnalyser():
             filename = f'{project_str}_{inst}_{cat}_{mnrl}_{scope}'+sfx
         else:
             filename = f'{project_str}_{cat}_{mnrl}_{scope}'+sfx
-        output_file = Path(out_dir, filename).with_suffix(cfg.PLT_FRMT)
-        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0)
+        
+        # pdf output
+        output_file = Path(out_dir, filename).with_suffix('.pdf')
+        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='pdf')
+
+        # svg output
+        plt.rcParams['svg.fonttype'] = 'none'
+        output_file = Path(out_dir, filename).with_suffix('.svg')
+        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='svg')
 
         return ax
 

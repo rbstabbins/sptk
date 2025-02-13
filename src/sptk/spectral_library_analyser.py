@@ -80,10 +80,15 @@ class SpectralLibraryAnalyser():
 
     def plot_profiles(self,
             stacked: bool=False,
-            categories_only: bool=False,
+            scope: Literal[
+                'library',
+                'categories',
+                'groups',
+                'species',
+                str # for individual category, group or species names
+            ],            
             ci: bool=False,
             with_noise: bool=False,
-            scope: str='all',
             hires_under: bool=False,
             out_dir: Union[bool, str]=False
             ) -> plt.Axes:
@@ -93,37 +98,56 @@ class SpectralLibraryAnalyser():
             tic = time.perf_counter()
             print('Plotting reflectance profiles of materials...')
 
-        # get the reflectance data for all minerals and for each category
-        refl_df = self.spectra_obj.get_refl_df()
-        cat_df = self.spectra_obj.get_cat_df()
+        if scope == 'library':
+            # get the reflectance data for all minerals and for each category
+            refl_df = self.spectra_obj.get_refl_df()
+            cat_df = self.spectra_obj.get_cat_df()
 
-        # incorporate error DF into this data for plotting
-        all_df = pd.concat([refl_df, cat_df], axis=1)
-        
-        ax = self.render_profile_plot(all_df,
-                    stacked=stacked,
-                    scope=scope,
-                    with_noise=with_noise,
-                    hires_under=hires_under,
-                    ci=ci)
-        axes = [ax]
-        if categories_only:
+            # incorporate error DF into this data for plotting
+            all_df = pd.concat([refl_df, cat_df], axis=1)
+            
+            ax = self.render_profile_plot(
+                        all_df,
+                        stacked=stacked,
+                        scope=scope,
+                        with_noise=with_noise,
+                        hires_under=hires_under,
+                        ci=ci)
+            axes = [ax]
+
             if cfg.TIME_IT:
                 toc = time.perf_counter()
                 print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
             return ax
+        
+        if scope == 'categories':
+                # get data for category
+                refl_df = self.spectra_obj.get_refl_df(cat)
+                cat_series = self.spectra_obj.get_cat_df(cat)
+                cat_df = pd.concat([refl_df, cat_series], axis=1)
+                ax = self.render_profile_plot(
+                            cat_df,
+                            cat=cat,
+                            stacked=stacked,
+                            scope=scope,
+                            with_noise=with_noise,
+                            ci=ci,
+                            hires_under=hires_under,
+                            out_dir=out_dir)
+                axes.append(ax)
+
 
         # plot for each category and mineral name
         for cat in self.spectra_obj.categories:
             mineral_list = self.spectra_obj.get_mineral_list(cat, unique=True)
             for mnrl in mineral_list:
                 # get data for category and mineral
-                refl_df = self.spectra_obj.get_refl_df(category=cat,
-                                                            mineral_name=mnrl)
-                cat_df = self.spectra_obj.get_cat_df(category=cat,
-                                                            mineral_name=mnrl)
+                refl_df = self.spectra_obj.get_refl_df(cat, mnrl)
+                cat_df = self.spectra_obj.get_cat_df(cat, mnrl)
                 cat_mnrl_df = pd.concat([refl_df, cat_df], axis=1)
-                ax = self.render_profile_plot(cat_mnrl_df,                                              
+                ax = self.render_profile_plot(
+                            cat_mnrl_df,                                              
                             cat=cat,
                             mnrl=mnrl,
                             stacked=stacked,
@@ -133,56 +157,12 @@ class SpectralLibraryAnalyser():
                             hires_under=hires_under,
                             out_dir=out_dir)
                 axes.append(ax)
-        
-        # put all axes into a new figure
 
         if cfg.TIME_IT:
             toc = time.perf_counter()
             print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
 
         return axes
-
-    @staticmethod
-    def stack_spectra(data_df: pd.DataFrame, wvls: List, offset: pd.Series=None) -> pd.DataFrame:
-        """Stack the spectra of the dataframe for plotting.
-
-        :param data_df: Reflectance data to be stacked
-        :type data_df: pd.DataFrame
-        :return: Stacked Reflectance data
-        :rtype: pd.DataFrame
-        """        
-        # apply offsets to reflectance
-
-        # sort categories by alphabetical order
-        data_df = data_df.sort_values(by=['Category', 'Data ID'], ascending=True)
-        
-        # reset index
-        data_df = data_df.reset_index(drop=True)
-        
-        if offset is None:
-            # get minima
-            minima = data_df[wvls].min(axis=1)
-            maxima = data_df[wvls].max(axis=1)
-            range = maxima - minima
-            max_range = (range).max()
-
-            # add offset to reflectance
-            # stack so that minima of each spectra == maxima + 0.2 of spectra below
-            # offset = data_df[wvls].max(axis=1) + 0.4
-            # offset = offset.cumsum().shift(fill_value=0.0) # use shift to set first offset == 0
-            offset = data_df.index * max_range - range/2 - minima
-    
-        data_df[wvls] = (data_df[wvls].T + offset).T
-
-        # get the last finite reflectance value of each row
-        idx = data_df.index
-        level = data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])
-        # level = offset + max_range/2
-        label = data_df['Data ID']
-
-        annotation = (idx, level, label)
-
-        return data_df, offset, annotation
 
     def render_profile_plot(self,
             data_df: pd.DataFrame,
@@ -215,6 +195,9 @@ class SpectralLibraryAnalyser():
         """
 
         data_df = data_df.reset_index()
+
+        if len(data_df) == 1: # don't stack if only one entry
+            stacked = False
 
         if stacked:
             data_df, offset, annotation = SpectralLibraryAnalyser.stack_spectra(data_df, self.wvls)
@@ -345,19 +328,22 @@ class SpectralLibraryAnalyser():
         Mnrl = mnrl.capitalize()
         project_str = self.spectra_obj.project_name.replace('_', ' ')
 
+        # Special treatment for Instrument Sampled spectra
         if self.obj_type == 'observation':
-            leg_title = f'Class: {Cat}, Group: {mnrl} ({scope} data) - sampled'
+
+            # edit plot and legend titles
+            leg_title = f'Class: {Cat}, Group: {mnrl} ({scope} data) - sampled'      
             if ci:
                 title = f'{self.spectra_obj.instrument.name} {Cat} {Mnrl} Mean ± 1σ'
             else:                
                 title = f'{self.spectra_obj.instrument.name} {Cat} {Mnrl}'
+
+            # include the hi-res spectra that has been sampeld by the instrument
             if hires_under:
                 matcol = self.spectra_obj.material_collection
                 if cat != 'all':
-                    refl_df = matcol.get_refl_df(category=cat,
-                                                                mineral_name=mnrl)
-                    cat_df = matcol.get_cat_df(category=cat,
-                                                                mineral_name=mnrl)
+                    refl_df = matcol.get_refl_df(cat, mnrl)
+                    cat_df = matcol.get_cat_df(cat, mnrl)
                 else:
                     refl_df = matcol.get_refl_df()
                     cat_df = matcol.get_cat_df()
@@ -408,16 +394,47 @@ class SpectralLibraryAnalyser():
 
         return ax
 
-    # def apply_offsets(self, data_df: pd.DataFrame) -> pd.DataFrame:
-    #     """Apply offsets to the reflectance data for plotting
+    @staticmethod
+    def stack_spectra(data_df: pd.DataFrame, wvls: List, offset: pd.Series=None) -> pd.DataFrame:
+        """Stack the spectra of the dataframe for plotting.
 
-    #     :param data_df: The reflectance data
-    #     :type data_df: pd.DataFrame
-    #     :return: the offset reflectance data
-    #     :rtype: pd.DataFrame
-    #     """        
-    #     # make column of offsets, each by 0.1
+        :param data_df: Reflectance data to be stacked
+        :type data_df: pd.DataFrame
+        :return: Stacked Reflectance data
+        :rtype: pd.DataFrame
+        """        
+        # apply offsets to reflectance
 
+        # sort categories by alphabetical order
+        data_df = data_df.sort_values(by=['Category', 'Data ID'], ascending=True)
+        
+        # reset index
+        data_df = data_df.reset_index(drop=True)
+        
+        if offset is None:
+            # get minima
+            minima = data_df[wvls].min(axis=1)
+            maxima = data_df[wvls].max(axis=1)
+            range = maxima - minima
+            max_range = (range).max()
+
+            # add offset to reflectance
+            # stack so that minima of each spectra == maxima + 0.2 of spectra below
+            # offset = data_df[wvls].max(axis=1) + 0.4
+            # offset = offset.cumsum().shift(fill_value=0.0) # use shift to set first offset == 0
+            offset = (data_df.index.values + 1) * max_range - range/2 - minima
+    
+        data_df[wvls] = (data_df[wvls].T + offset).T
+
+        # get the last finite reflectance value of each row
+        idx = data_df.index
+        level = data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])
+        # level = offset + max_range/2
+        label = data_df['Data ID']
+
+        annotation = (idx, level, label)
+
+        return data_df, offset, annotation
 
     # """
     # Spectrogram Visualisation & Continuum Removal

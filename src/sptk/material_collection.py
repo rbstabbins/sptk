@@ -25,10 +25,17 @@ from sptk.instrument import Instrument
 from sptk.spectral_library_analyser import SpectralLibraryAnalyser
 
 HEADER_LIST = [
-    'Sample ID', 'Mineral Name',
-    'Sample Description', 'Date Added', 'Viewing Geometry',
-    'Other Information', 'Formula', 'Composition',
-    'Resolution', 'Grain Size', 'Locality',
+    'Sample ID', 
+    'Mineral Name',
+    'Sample Description', 
+    'Date Added', 
+    'Viewing Geometry',
+    'Other Information', 
+    'Formula', 
+    'Composition',
+    'Resolution', 
+    'Grain Size', 
+    'Locality',
     'Database of Origin']
 
 class MaterialCollection():
@@ -37,9 +44,9 @@ class MaterialCollection():
 
     def __init__(
             self,
-            materials: dict,
-            spectral_library: str = None,
-            project_name: str = 'case',
+            material_dict: dict,
+            spectral_library: str,
+            project_name: str,
             load_existing: bool = cfg.LOAD_EXISTING,
             balance_classes: bool=True,
             random_bias_seed: int = None,
@@ -48,24 +55,23 @@ class MaterialCollection():
             export_df: bool = cfg.EXPORT_DF) -> None:
         """Constructor for MaterialCollection class
 
-        :param materials: dictionary mapping of class labels to mineral group
-            names and filenames or wildcards.
-            e.g.: materials = {
-                        'class_1': [('material_1', file_specification)],
-                        'class_2': [('material_2', file_specification),
-                                    ('material_3', file_specification)]
+        :param material_dict: dictionary mapping category labels to mineral species
+            or group and filenames or wildcards.
+            e.g.: material_dict = {
+                        'category_1': [('species_1', '*')], # all files in species_1
+                        'category_2': [('species_2', filename), # only filename in species_2
+                                    ('group_1', '*')] # all species and files in group_1
                                 }
-        :type materials: dict
-        :param spectral_library: name of spectral library to draw samples from,
-            defaults to None
-        :type spectral_library: str, optional
-        :param project_name: name of project and directory, defaults to 'case'
-        :type project_name: str, optional
+        :type material_dict: dict
+        :param spectral_library: name of spectral library to draw samples from
+        :type spectral_library: str
+        :param project_name: name of project and directory
+        :type project_name: str
         :param load_existing: instruct to use or overwrite existing directories
             and files of the same project_name, defaults to config.py setting.
         :type load_existing: bool, optional
-        :param balance_classes: instruct whether to balance class sizes by
-            randomly removing samples until class sizes are equal, defaults to
+        :param balance_classes: instruct whether to balance category sizes by
+            randomly removing samples until category sizes are equal, defaults to
             True.
         :type balance_classes: bool, optional
         :param random_bias_seed: only valid if balance_classes is True; set to
@@ -86,11 +92,11 @@ class MaterialCollection():
             tic = time.perf_counter()
 
         self.project_dir, self.project_name = cfg.build_project_directory(
-            project_name, 'material_collection')
+                                            project_name, 'material_collection')
         self.object_dir = Path(self.project_dir / 'material_collection')
         self.spectral_library = spectral_library
         self.material_file_dict = MaterialCollection.parse_materials(
-            materials, spectral_library)
+                                            material_dict, spectral_library)
         self.categories = list(self.material_file_dict.keys())
         self.wvls = cfg.WVLS
         self.allow_out_of_bounds = allow_out_of_bounds
@@ -153,81 +159,131 @@ class MaterialCollection():
 
     @staticmethod
     def parse_materials(material_dict: dict, spectral_library: str) -> dict:
-        """Parses the 'materials' dictionary (category labels for material names
-        and entry IDs) into a dictionary of class labels and entry filepaths,
-        for look-up in the specified local spectral library.
+        """Parses the 'material_dict' dictionary into a dictionary of categories
+        and entry filepaths, for look-up in the specified spectral library.
 
-        :param materials: dictionary mapping of class labels to mineral group
-            names and filenames or wildcards.
-            e.g.: materials = {
-                        'class_1': [('material_1', file_specification)],
-                        'class_2': [('material_2', file_specification),
-                                    ('material_3', file_specification)]
+        :param material_dict: dictionary mapping category labels to mineral species
+            or group and filenames or wildcards.
+            e.g.: material_dict = {
+                        'category_1': [('species_1', '*')], # all files in species_1
+                        'category_2': [('species_2', filename), # only filename in species_2
+                                    ('group_1', '*')] # all species and files in group_1
                                 }
-        :type materials: dict
+        :type material_dict: dict
         :param spectral_library: name of spectral library to draw samples from,
             defaults to None
         :type spectral_library: str, optional
-        :return: Dictionary mapping class labels to lists of entry filepaths
+        :return: Dictionary mapping category labels to lists of entry filepaths
         :rtype: dict
         """
+        # set and check directory paths
         data_dir = cfg.DATA_DIRECTORY
-        if spectral_library is None:
-            data_library = Path(data_dir, 'spectral_library')
-        else:
-            data_library = Path(data_dir, 'spectral_library', spectral_library)
+        data_library = Path(data_dir, 'spectral_library', spectral_library) # note - no longer allows None-type spectral library        
 
         data_library_exists = os.path.isdir(cfg.resolve_path(data_library, root='data'))
         if not data_library_exists:
             raise FileNotFoundError(
                 errno.ENOENT, os.strerror(errno.ENOENT), str(data_library))
 
-        entry_dict = {}
+        # mapping the library
+        groups = {os.path.basename(dir): dir for dir in glob.glob(str(data_library)+'*/*', recursive=True)}
+        subgroups = {os.path.basename(dir): dir for dir in glob.glob(str(data_library)+'*/*/*', recursive=True)}
+        species = {os.path.basename(dir): dir for dir in glob.glob(str(data_library)+'*/*/*/*', recursive=True)}
+        
+        # initialise the filename dictionary
+        file_dict = {}
         for cat in material_dict.keys():
             # for each category make new dict entry
             
-            # if the category label is in the list of directories of the given 
-            # spectral library, then set the cat_path to 
-            # [spectral_library]/[category]
-            # this allows for loading of the larger RELAB structure
-            if cat in os.listdir(data_library):
-                cat_path = data_library / cat
-            else:
-                cat_path = data_library
+            # NO - don't want to use this approach anymore.
+            # # if the category label is in the list of directories of the given 
+            # # spectral library, then set the cat_path to 
+            # # [spectral_library]/[category]
+            # # this allows for loading of the larger RELAB structure
+            # if cat in os.listdir(data_library):
+            #     cat_path = data_library / cat
+            # else:
+            #     cat_path = data_library
+            
+            # for the given cat, get the group, subgroup or species label - call these labels
 
-            entries = material_dict[cat]
-            entry_is_singular = isinstance(entries, tuple)
-            if entry_is_singular:
-                entries = [entries] # encase in list
+            labels = material_dict[cat]
+            
+            # encase in list if singular entry
+            label_is_singular = isinstance(labels, tuple)
+            if label_is_singular:
+                labels = [labels]
 
-            cat_entries = []
-            for entry in entries:  # build entry filepath
-                mineral_group = entry[0]
-                file_keys = entry[1]
-                file_keys_in_list = isinstance(file_keys, list)
-                if not file_keys_in_list:
-                    file_keys = [file_keys] # encase in list
-                entry_files = []
-                for file_key in file_keys:  # add category and material to list
-                    filename = file_key + '.csv'
-                    entry_files.append(cat_path / mineral_group / filename)
-                # expand the filenames into list
-                # cat_entries = cat_entries + \
-                #     sum([glob.glob(str(cfg.resolve_path(entry_file, root='package')))
-                #             for entry_file in entry_files], [])
-                # expand the filenames into list, but relative to the package
-                for entry_file in entry_files:
-                    file_list = glob.glob(str(cfg.resolve_path(entry_file, root='data')))                    
-                    file_list = [os.path.relpath(file, cfg.DATA_DIRECTORY) for file in file_list]
-                    cat_entries = cat_entries + file_list
+            # initialise list of labels for this category
+            cat_labels = []
+            # build list of filepaths for entries in this label and category
+            for label in labels: 
+                label_dirname = label[0]
+                label_file_specifier = label[1]
 
-            entry_dict[cat] = sorted(cat_entries)
+                # search for the label_dirname in the directory tree - but how to handle mineral groups that are also mineral species? Raise error? Always specify name not group? That should be the rule. No - always call the group name plural. Hematite of the Hematites group. So if it's Hematites, '*', it's all members of the hematites group
+                if label_dirname in species.keys():   
+                    label_dir = species[label_dirname]                 
 
-        return entry_dict
+                elif label_dirname in subgroups.keys():
+                    label_dir = subgroups[label_dirname]
+
+                elif label_dirname in groups.keys():
+                    label_dir = groups[label_dirname]
+
+                else:
+                    raise FileNotFoundError(
+                        errno.ENOENT, os.strerror(errno.ENOENT), str(label_dirname))
+                
+                # get the filepaths for the label_file_specifier
+                # if singular entry (e.g. '*'), make into a list
+                if not isinstance(label_file_specifier, list):
+                    label_file_specifier = [label_file_specifier]
+                # add '.csv' to the end of the specifier
+                label_filenames = [f + 'csv' for f in label_file_specifier]  # add category and material to list
+
+                # search for each of the label filenames in the directories and subdirectories under the label_dir
+                for label_filename in label_filenames:
+                    file_list = glob.glob('**/'+label_filename, root_dir=label_dir, recursive=True)                  
+                    file_list = [Path(label_dir) / file for file in file_list]
+                    cat_labels = cat_labels + file_list
+
+                # # build full path to search for
+                # if not isinstance(label_file_specifier, list):
+                #     label_file_specifier = [label_file_specifier]
+                # entry_files = []
+                # for file_key in label_file_specifier:  # add category and material to list
+                #     filename = file_key + '.csv'
+                #     entry_files.append(cat_path / mineral_group / filename)
+
+                # mineral_group = entry[0]
+                # file_keys = entry[1]
+                
+                # file_keys_in_list = isinstance(file_keys, list)
+                # if not file_keys_in_list:
+                #     file_keys = [file_keys] # encase in list
+                
+                # entry_files = []
+                # for file_key in file_keys:  # add category and material to list
+                #     filename = file_key + '.csv'
+                #     entry_files.append(cat_path / mineral_group / filename)
+                # # expand the filenames into list
+                # # cat_entries = cat_entries + \
+                # #     sum([glob.glob(str(cfg.resolve_path(entry_file, root='package')))
+                # #             for entry_file in entry_files], [])
+                # # expand the filenames into list, but relative to the package
+                # for entry_file in entry_files:
+                #     file_list = glob.glob(str(cfg.resolve_path(entry_file, root='data')))                    
+                #     file_list = [os.path.relpath(file, cfg.DATA_DIRECTORY) for file in file_list]
+                #     cat_entries = cat_entries + file_list
+
+            file_dict[cat] = sorted(cat_labels)
+
+        return file_dict
 
     def build_new_material_collection(self) -> pd.DataFrame:
         """Initialises and populates a new MaterialCollection DataFrame, and
-        optionally balances the classes, produces plots, and exports to csv.
+        optionally balances the categories, produces plots, and exports to csv.
 
         Material files with out-of-range wavelengths will have values set to
         None in the DataFrame.
@@ -403,7 +459,7 @@ class MaterialCollection():
 
     def balance_class_sizes(self, random_state: int = None):
         """Checks for class balance, and randomly removes samples so that all
-        classes are of the same size, matching that of the smallest class.
+        categories are of the same size, matching that of the smallest category.
 
         If a Bayesian method of calculating the decision boundary were
         implemented, then this step wouldn't be necessary.
@@ -414,14 +470,14 @@ class MaterialCollection():
         """
         if self.main_df.Category.value_counts().is_unique:
             print('Balancing class sizes...')
-            class_n_dict = self.main_df.Category.value_counts().to_dict()
-            # for each class that is not the smallest class
-            min_class = min(class_n_dict, key=class_n_dict.get)
+            cat_n_dict = self.main_df.Category.value_counts().to_dict()
+            # for each category that is not the smallest category
+            min_cat = min(cat_n_dict, key=cat_n_dict.get)
             for cat in self.categories:
-                if cat is min_class:
+                if cat is min_cat:
                     continue
                 # number of samples to remove
-                n_r = class_n_dict[cat] - class_n_dict[min_class]
+                n_r = cat_n_dict[cat] - cat_n_dict[min_cat]
                 # randomly select n_r samples
                 to_drop = self.main_df[self.main_df.Category == cat].sample(
                     n=n_r, random_state=random_state).index
@@ -430,14 +486,14 @@ class MaterialCollection():
 
     def balance_mineral_groups(self, random_state: int=None):
         """Checks for class and mineral group balance. First balances mineral
-        groups, then balances classes by stratified undersampling of the
-        mineral groups of the larger class size.
+        groups, then balances categories by stratified undersampling of the
+        mineral groups of the larger category size.
 
         :param random_state: set random number seed for reproducibility,
             defaults to None
         :type random_state: int, optional
         """
-        # for each class
+        # for each category
         for cat in self.categories:
             cat_df = self.main_df[self.main_df.Category == cat]
             mnrl_n = cat_df.groupby('Mineral Name')['Mineral Name'].count()
@@ -447,28 +503,28 @@ class MaterialCollection():
                                 n=mnrl_r[mnrl], random_state=random_state).index
                 # remove the selected samples
                 self.main_df.drop(to_drop, inplace=True)
-        # check difference between class sizes
+        # check difference between category sizes
         if self.main_df.Category.value_counts().is_unique:
             print('Balancing class sizes...')
-            class_n_dict = self.main_df.Category.value_counts().to_dict()
-            # get the smallest class
-            min_class = min(class_n_dict, key=class_n_dict.get)
-            # for each class that is not the smallest class:
+            cat_n_dict = self.main_df.Category.value_counts().to_dict()
+            # get the smallest category
+            min_cat = min(cat_n_dict, key=cat_n_dict.get)
+            # for each category that is not the smallest category:
             for cat in self.categories:
-                if cat is min_class:
+                if cat is min_cat:
                     continue
-                # number of samples to remove from this class is the
-                # difference between the number of samples this class and the
-                # number of samples in the smallest class
-                n_r = class_n_dict[cat] - class_n_dict[min_class]
+                # number of samples to remove from this category is the
+                # difference between the number of samples this category and the
+                # number of samples in the smallest category
+                n_r = cat_n_dict[cat] - cat_n_dict[min_cat]
 
-                # get the number of samples in each mineral group of this class
+                # get the number of samples in each mineral group of this category
                 cat_df = self.main_df[self.main_df.Category == cat]
                 mnrl_n = cat_df.groupby('Mineral Name')['Mineral Name'].count()
 
                 # number of samples to remove from each mineral group
                 n_m_r = n_r // len(mnrl_n)
-                # remainder of samples to remove from the class
+                # remainder of samples to remove from the category
                 n_r_r = n_r % len(mnrl_n)
 
                 # remove number of samples from each mineral group
@@ -480,7 +536,7 @@ class MaterialCollection():
                     self.main_df.drop(to_drop, inplace=True)
                     # update the cat_df to reflect the removal
                     cat_df = self.main_df[self.main_df.Category == cat]
-                # remove remainder from this class
+                # remove remainder from this category
                 if n_r_r != 0:
                     to_drop = cat_df.sample(
                             n=n_r_r, random_state=random_state).index
@@ -820,16 +876,21 @@ class MaterialCollection():
 
 
     def plot_profiles(self, 
-                      stacked: bool=False,
-                      categories_only: bool=False, 
-                      ci: bool=False) -> plt.Axes:
+                    stacked: bool=False,
+                    scope: bool=False, 
+                    ci: bool=False,
+                    with_noise: bool=False,
+                    hires_under: bool=False,
+                    ) -> plt.Axes:
         """Plot the profiles of the materials
         """
         plotter = SpectralLibraryAnalyser(self)
         axes = plotter.plot_profiles(
-                            stacked=stacked,
-                            categories_only=categories_only, 
-                            ci=ci)
+                        stacked=stacked,
+                        scope=scope,
+                        ci=ci,
+                        with_noise=with_noise,
+                        hires_under=hires_under)
         return axes
     
     def render_colour(self, 

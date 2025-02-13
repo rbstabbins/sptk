@@ -91,12 +91,12 @@ MICA_SET = {
         ('calcite', '*')
     ],
     'hydrated silicates \n & halides': [
-        ('hydrated-silica', '*'),
+        ('siliceous-sinter', '*'),
         ('halite_mica', '*'),
         ('epidote', '*'),
         ('analcime', '*'),
         ('chloride', '*'),
-        ('zeolite-prehnite', '*')
+        ('prehnite', '*')
     ]
 }
 

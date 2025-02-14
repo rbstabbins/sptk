@@ -66,12 +66,12 @@ MICA_SET = {
             ('fayalite', '*'),
             ('plagioclase', '*'),
             ('orthopyroxene', '*'),
-            ('pyroxene', '*')],
+            ('clinopyroxene', '*')],
     'sulfates': [
         ('kieserite', '*'),
         ('alunite', '*'),
         ('jarosite', '*'),
-        ('magnesium-sulfate', '*'),
+        ('magnesium-sulphate', '*'),
         ('gypsum', '*'),
         ('bassanite', '*')
     ],
@@ -92,10 +92,9 @@ MICA_SET = {
     ],
     'hydrated silicates \n & halides': [
         ('siliceous-sinter', '*'),
-        ('halite_mica', '*'),
+        ('halite', '*'),
         ('epidote', '*'),
         ('analcime', '*'),
-        ('chloride', '*'),
         ('prehnite', '*')
     ]
 }

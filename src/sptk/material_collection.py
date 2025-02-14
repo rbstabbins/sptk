@@ -26,12 +26,14 @@ from sptk.spectral_library_analyser import SpectralLibraryAnalyser
 
 HEADER_LIST = [
     'Sample ID', 
-    'Mineral Name',
+    'Species',
+    'Subgroup',
+    'Group',
+    'Library',
     'Sample Description', 
     'Date Added', 
     'Viewing Geometry',
-    'Other Information', 
-    'Formula', 
+    'Other Information',  
     'Composition',
     'Resolution', 
     'Grain Size', 
@@ -194,19 +196,6 @@ class MaterialCollection():
         file_dict = {}
         for cat in material_dict.keys():
             # for each category make new dict entry
-            
-            # NO - don't want to use this approach anymore.
-            # # if the category label is in the list of directories of the given 
-            # # spectral library, then set the cat_path to 
-            # # [spectral_library]/[category]
-            # # this allows for loading of the larger RELAB structure
-            # if cat in os.listdir(data_library):
-            #     cat_path = data_library / cat
-            # else:
-            #     cat_path = data_library
-            
-            # for the given cat, get the group, subgroup or species label - call these labels
-
             labels = material_dict[cat]
             
             # encase in list if singular entry
@@ -221,13 +210,11 @@ class MaterialCollection():
                 label_dirname = label[0]
                 label_file_specifier = label[1]
 
-                # search for the label_dirname in the directory tree - but how to handle mineral groups that are also mineral species? Raise error? Always specify name not group? That should be the rule. No - always call the group name plural. Hematite of the Hematites group. So if it's Hematites, '*', it's all members of the hematites group
+                # search for the label_dirname in the directory tree                
                 if label_dirname in species.keys():   
                     label_dir = species[label_dirname]                 
-
                 elif label_dirname in subgroups.keys():
                     label_dir = subgroups[label_dirname]
-
                 elif label_dirname in groups.keys():
                     label_dir = groups[label_dirname]
 
@@ -240,42 +227,17 @@ class MaterialCollection():
                 if not isinstance(label_file_specifier, list):
                     label_file_specifier = [label_file_specifier]
                 # add '.csv' to the end of the specifier
-                label_filenames = [f + 'csv' for f in label_file_specifier]  # add category and material to list
+                label_filenames = [f + 'csv' for f in label_file_specifier]
 
-                # search for each of the label filenames in the directories and subdirectories under the label_dir
+                # search for each of the label filenames in the directories
+                # and subdirectories under the label_dir
                 for label_filename in label_filenames:
-                    file_list = glob.glob('**/'+label_filename, root_dir=label_dir, recursive=True)                  
-                    file_list = [Path(label_dir) / file for file in file_list]
+                    file_list = glob.glob(
+                                        '**/'+label_filename, # '**' searches recursively
+                                        root_dir=label_dir, 
+                                        recursive=True)                  
+                    file_list = [Path(label_dir) / file for file in file_list] # stitch the full path together
                     cat_labels = cat_labels + file_list
-
-                # # build full path to search for
-                # if not isinstance(label_file_specifier, list):
-                #     label_file_specifier = [label_file_specifier]
-                # entry_files = []
-                # for file_key in label_file_specifier:  # add category and material to list
-                #     filename = file_key + '.csv'
-                #     entry_files.append(cat_path / mineral_group / filename)
-
-                # mineral_group = entry[0]
-                # file_keys = entry[1]
-                
-                # file_keys_in_list = isinstance(file_keys, list)
-                # if not file_keys_in_list:
-                #     file_keys = [file_keys] # encase in list
-                
-                # entry_files = []
-                # for file_key in file_keys:  # add category and material to list
-                #     filename = file_key + '.csv'
-                #     entry_files.append(cat_path / mineral_group / filename)
-                # # expand the filenames into list
-                # # cat_entries = cat_entries + \
-                # #     sum([glob.glob(str(cfg.resolve_path(entry_file, root='package')))
-                # #             for entry_file in entry_files], [])
-                # # expand the filenames into list, but relative to the package
-                # for entry_file in entry_files:
-                #     file_list = glob.glob(str(cfg.resolve_path(entry_file, root='data')))                    
-                #     file_list = [os.path.relpath(file, cfg.DATA_DIRECTORY) for file in file_list]
-                #     cat_entries = cat_entries + file_list
 
             file_dict[cat] = sorted(cat_labels)
 
@@ -296,23 +258,42 @@ class MaterialCollection():
         with click.progressbar(filepaths) as load_bar:
             for filepath in load_bar:  # for each file, load_material
                 new_entry = MaterialCollection.load_material(filepath)
-                filename = os.path.basename(filepath)
-                mat_group = os.path.basename(os.path.dirname(filepath))
+                # extract data id, species, subgroup, group and library
+                path_parts = list(Path(filepath).parts)
+                data_id = path_parts[-1]
+                path_list = list(path_parts)
+                # get to the directory tree
+                while path_list.pop(0) != self.spectral_library: pass
+
+                if path_list[0] != data_id:
+                    group = path_list.pop(0)
+                else:
+                    group = None
+                if path_list[0] != data_id:
+                    subgroup = path_list.pop(0)
+                else:
+                    subgroup = None
+                if path_list[0] != data_id:
+                    species = path_list.pop(0)
+                else:
+                    species = None
+
                 if not self.allow_out_of_bounds:
                     has_nan = np.isnan(np.sum(new_entry[cfg.WVLS].to_numpy()))
                     if has_nan:
-                        print(f'{mat_group}: {filename} is out of bounds, removing...')
+                        print(f'{data_id} ({species} {subgroup} {group} {self.spectral_library}) does not span wavelength range, removing...')
                         main_df.drop(
                             main_df[main_df.Filepath == filepath].index,
                             inplace=True)
                     else:
-                        print(f'{mat_group}: {filename} loaded')
+                        print(f'{data_id} ({species} {subgroup} {group} {self.spectral_library}) loaded')
                         main_df.loc[main_df.Filepath == filepath,
                                         new_entry.columns] = new_entry.values
                 else:
-                    print(f'{mat_group}: {filename} loaded')
+                    print(f'{data_id} ({species} {subgroup} {group} {self.spectral_library}) loaded')
                     main_df.loc[main_df.Filepath == filepath,
                                     new_entry.columns] = new_entry.values
+        # add the group, subgroup, species to the main_df
         # put the Data ID as the index
         main_df.set_index('Data ID', inplace=True)
         print(f'Loading {len(main_df.index)} of entries complete.')
@@ -353,12 +334,15 @@ class MaterialCollection():
             'Category': pd.Series(material_categories, dtype='category'),
             'Data ID': pd.Series(null_list, dtype='str'),
             'Sample ID': pd.Series(null_list, dtype='str'),
-            'Mineral Name': pd.Series(null_list, dtype='str'),
+            'Species': pd.Series(null_list, dtype='str'), # renamed from Mineral Name
+            'Subgroup': pd.Series(null_list, dtype='str'), # new entry
+            'Group': pd.Series(null_list, dtype='str'), # new entry
+            'Library': pd.Series(null_list, dtype='str'), # new entry - replaces Database of Origin
             'Sample Description': pd.Series(null_list, dtype='str'),
             'Date Added': pd.Series(null_list, dtype='str'),
             'Viewing Geometry': pd.Series(null_list, dtype='str'),
             'Other Information': pd.Series(null_list, dtype='str'),
-            'Formula': pd.Series(null_list, dtype='str'),
+            # 'Formula': pd.Series(null_list, dtype='str'), # merge with Composition
             'Composition': pd.Series(null_list, dtype='str'),
             'Resolution': pd.Series(null_list, dtype='str'),
             'Grain Size': pd.Series(null_list, dtype='str'),
@@ -408,17 +392,52 @@ class MaterialCollection():
 
         # replace 'Sample Name' with 'Mineral Name'
         hdr = hdr.rename({'Sample Name': 'Mineral Name'})
+        # replace Mineral Name with Species
+        hdr = hdr.rename({'Mineral Name': 'Species'})
 
-        # replace the Mineral Name with the directory name
-        mnrl_dir_name = os.path.split(os.path.split(filepath)[0])[1]
-        hdr.loc['Mineral Name'] = mnrl_dir_name
+        # replace 'Formula' with 'Composition'
+        hdr = hdr.rename({'Formula': 'Composition'})
 
-        try:
-            # if no 'Data ID' label, try 'Sample ID'
-            hdr.loc['Data ID']
-        except KeyError:
-            # use filename as Data ID
-            hdr.loc['Data ID'] = Path(filepath).stem
+        # extract data ID, species, subgroup, group and library
+        path_parts = list(Path(filepath).parts)
+        data_id = path_parts[-1].split('.')[0]
+        path_list = list(path_parts)
+        # get to the directory tree
+        while path_list.pop(0) != 'spectral_library': pass
+        spectral_library = path_list.pop(0)
+
+        # library/data_id
+        if len(path_list) == 1:
+            group = None
+            subgroup = None
+            species = None
+        # library/species/data_id
+        elif len(path_list) == 2:
+            group = None
+            subgroup = None
+            species = path_list.pop(0)
+        # library/group/species/data_id
+        elif len(path_list) == 3:
+            group = path_list.pop(0)
+            subgroup = None
+            species = path_list.pop(0)
+        # library/group/subgroup/species/data_id
+        elif len(path_list) == 4:
+            group = path_list.pop(0)
+            subgroup = path_list.pop(0)
+            species = path_list.pop(0)
+
+        # set the Species to the directory name
+        hdr.loc['Species'] = species
+
+        # try:
+        #     # if no 'Data ID' label, try 'Sample ID'
+        #     hdr.loc['Data ID']
+        # except KeyError:
+
+        #  always use species + filename as Data ID
+        hdr.loc['Data ID'] = species.capitalize() + ' ' +data_id
+        # should we be taking sample id from filename?
 
         # handling of new Grain Size and Grain Size Description entries to VISOR
         # discards Grain Size in favour of 'old' style Grain Size Description,
@@ -450,7 +469,10 @@ class MaterialCollection():
         mtrl_hdr = pd.concat([mtrl_hdr, missing_header])
         mtrl_hdr = mtrl_hdr.reindex(header_indx)  # apply the original headings
         mtrl_hdr = mtrl_hdr.str.strip() # remove leading/trailing white space
-        mtrl_hdr['Mineral Name'] = mtrl_hdr['Mineral Name'].lower()
+        mtrl_hdr['Species'] = mtrl_hdr['Species'].lower()
+        mtrl_hdr['Subgroup'] = subgroup
+        mtrl_hdr['Group'] = group
+        mtrl_hdr['Library'] = spectral_library
 
         # prepare data for appending to main dataframe
         mtrl_df = pd.concat([mtrl_hdr, refl_series]).to_frame().transpose()
@@ -696,26 +718,26 @@ class MaterialCollection():
 
     def get_subset_df(self,
             category: str = None,
-            mineral_name: str = None) -> pd.DataFrame:
+            species: str = None) -> pd.DataFrame:
         """Return a subset of the dataframe, according to selection
-        from specific category and mineral type.
+        from specific category and species.
 
         :param category: categorical subset of data, defaults to None
         :type category: str, optional
-        :param mineral_name: mineral subset of data, defaults to None
+        :param species: species subset of data, defaults to None
         :type mineral_name: str, optional
         :return: subset of dataframe according to category and mineral
         :rtype: pd.DataFrame
         """
-        if (category is not None) and (mineral_name is not None):
+        if (category is not None) and (species is not None):
             cat_mnrl_selection = (self.main_df.Category == category) & (
-                    self.main_df['Mineral Name'] == mineral_name)
+                    self.main_df['Species'] == species)
             subset_df = self.main_df.loc[cat_mnrl_selection,:]
         elif category is not None:
             cat_selection = self.main_df.Category == category
             subset_df = self.main_df.loc[cat_selection,:]
-        elif mineral_name is not None:
-            mnrl_selection = self.main_df['Mineral Name'] == mineral_name
+        elif species is not None:
+            mnrl_selection = self.main_df['Species'] == species
             subset_df = self.main_df.loc[mnrl_selection,:]
         else:
             subset_df = self.main_df
@@ -723,37 +745,54 @@ class MaterialCollection():
 
     def get_hdr_df(self,
             category: str = None,
-            mineral_name: str = None) -> pd.DataFrame:
+            species: str = None) -> pd.DataFrame:
         """Return a copy of the header dataframe subset of the array.
-        Allows for selection of data from specific category and mineral type.
+        Allows for selection of data from specific category and species.
 
         :param category: categorical subset of data, defaults to None
         :type category: str, optional
-        :param mineral_name: mineral subset of data, defaults to None
-        :type mineral_name: str, optional
+        :param species: species subset of data, defaults to None
+        :type species: str, optional
         :return: material collection header data
         :rtype: pd.DataFrame
         """
-        subset_df = self.get_subset_df(category, mineral_name)
+        subset_df = self.get_subset_df(category, species)
         hdr_df = subset_df.loc[:, self.header_list]
         return hdr_df
 
     def get_cat_df(self,
             category: str = None,
-            mineral_name: str = None) -> pd.DataFrame:
+            species: str = None) -> pd.DataFrame:
         """Returns a copy of the Categories of the array.
-        Allows for selection of data from specific category and mineral type.
+        Allows for selection of data from specific category and species.
 
         :param category: categorical subset of data, defaults to None
         :type category: str, optional
-        :param mineral_name: mineral subset of data, defaults to None
-        :type mineral_name: str, optional
+        :param species: species of data, defaults to None
+        :type species: str, optional
         :return: category labels
         :rtype: pd.DataFrame
         """
-        subset_df = self.get_subset_df(category, mineral_name)
+        subset_df = self.get_subset_df(category, species)
         cat_df = pd.DataFrame(subset_df.Category)
         return cat_df
+    
+    def get_label_df(self,
+            category: str = None,
+            species: str = None) -> pd.DataFrame:
+        """Returns a copy of the Labels (Library, Group, Subgroup, Species) of 
+        the array. Allows for selection of data from specific category and species.
+
+        :param category: categorical subset of data, defaults to None
+        :type category: str, optional
+        :param species: species of data, defaults to None
+        :type species: str, optional
+        :return: label data
+        :rtype: pd.DataFrame
+        """
+        subset_df = self.get_subset_df(category, species)
+        label_df = subset_df.loc[:, ['Library', 'Group', 'Subgroup', 'Species', 'Sample ID']].copy()
+        return label_df
 
     def get_mineral_list(self,
             category: str=None,
@@ -877,7 +916,8 @@ class MaterialCollection():
 
     def plot_profiles(self, 
                     stacked: bool=False,
-                    scope: bool=False, 
+                    scope: str='all', 
+                    groupby: str='Category',
                     ci: bool=False,
                     with_noise: bool=False,
                     hires_under: bool=False,
@@ -888,6 +928,7 @@ class MaterialCollection():
         axes = plotter.plot_profiles(
                         stacked=stacked,
                         scope=scope,
+                        groupby=groupby,
                         ci=ci,
                         with_noise=with_noise,
                         hires_under=hires_under)

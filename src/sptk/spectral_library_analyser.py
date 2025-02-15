@@ -78,106 +78,68 @@ class SpectralLibraryAnalyser():
         else:
             self.band_info = pd.DataFrame()
 
-    def plot_profiles(self,
-            scope: Literal[
-                'all',
-                'libraries', # one plot for each library used
-                'categories', # one plot for each category
-                'groups', # one plot for each group
-                'subgroups', # one plot for each subgroup
-                'species', # one plot for each species
-                'samples', # one plot for each sample
-                str # for specific category, group, subgroup, species, or sample
-                ]='all',         
-            groupby: Literal[
-                'Library', # hue/style by library
-                'Category', # hue/style by category
-                'Group', # hue/style by group
-                'Subgroup', # hue/style by subgroup
-                'Species', # hue/style by species
-                'Sample ID', # hue/style by Sample ID
-                'Data ID' # hue/style by Data ID
-                ]='category',   
-            stacked: bool=False,
-            ci: bool=False,
-            with_noise: bool=False,
-            hires_under: bool=False,
-            out_dir: Union[bool, str]=False
-            ) -> plt.Axes:
-        """Plot the profiles of the materials of the spectral library
-        """
-        if cfg.TIME_IT:
-            tic = time.perf_counter()
-            print('Plotting reflectance profiles of materials...')
+    @staticmethod
+    def stack_spectra(data_df: pd.DataFrame, wvls: List, offset: pd.Series=None) -> pd.DataFrame:
+        """Stack the spectra of the dataframe for plotting.
 
-        if scope == 'all':
-            # get the reflectance data for whole dataset
-            refl_df = self.spectra_obj.get_refl_df()
-            # get the category and group labels
-            cat_df = self.spectra_obj.get_cat_df()
-            label_df = self.spectra_obj.get_label_df()
-            groupby_df = pd.concat([cat_df, label_df], axis=1)
+        :param data_df: Reflectance data to be stacked
+        :type data_df: pd.DataFrame
+        :return: Stacked Reflectance data
+        :rtype: pd.DataFrame
+        """        
+        # apply offsets to reflectance
 
-            # incorporate error DF into this data for plotting
-            all_df = pd.concat([refl_df, groupby_df[groupby]], axis=1)
-            
-            ax = self.render_profile_plot(
-                        all_df,
-                        scope=scope,
-                        groupby=groupby,
-                        stacked=stacked,
-                        with_noise=with_noise,
-                        hires_under=hires_under,
-                        ci=ci)
-            axes = [ax]
-
-            if cfg.TIME_IT:
-                toc = time.perf_counter()
-                print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
-
-            return ax
+        # sort categories by alphabetical order
+        # get groupby from data_df
+        groupby = data_df.columns[-1]
+        data_df = data_df.sort_values(by=[groupby, 'Data ID'], ascending=False)
         
-        # if scope == 'categories':
-        #         # get data for category
-        #         refl_df = self.spectra_obj.get_refl_df(cat)
-        #         cat_series = self.spectra_obj.get_cat_df(cat)
-        #         cat_df = pd.concat([refl_df, cat_series], axis=1)
-        #         ax = self.render_profile_plot(
-        #                     cat_df,
-        #                     scope=scope,
-        #                     stacked=stacked,
-        #                     with_noise=with_noise,
-        #                     ci=ci,
-        #                     hires_under=hires_under,
-        #                     out_dir=out_dir)
-        #         axes.append(ax)
+        # reset index
+        data_df = data_df.reset_index(drop=True)
+        
+        if offset is None:
+            # get minima
+            minima = data_df[wvls].min(axis=1)
+            maxima = data_df[wvls].max(axis=1)
+            spec_range = maxima - minima
+            max_range = (spec_range).max()
 
+            # offset the reflectance
+            offset = (data_df.index.values + 1) * max_range - minima - spec_range/2
 
-        # # plot for each category and Species
-        # for cat in self.spectra_obj.categories:
-        #     mineral_list = self.spectra_obj.get_mineral_list(cat, unique=True)
-        #     for mnrl in mineral_list:
-        #         # get data for category and mineral
-        #         refl_df = self.spectra_obj.get_refl_df(cat, mnrl)
-        #         cat_df = self.spectra_obj.get_cat_df(cat, mnrl)
-        #         cat_mnrl_df = pd.concat([refl_df, cat_df], axis=1)
-        #         ax = self.render_profile_plot(
-        #                     cat_mnrl_df,                                              
-        #                     cat=cat,
-        #                     mnrl=mnrl,
-        #                     stacked=stacked,
-        #                     scope=scope,
-        #                     with_noise=with_noise,
-        #                     ci=ci,
-        #                     hires_under=hires_under,
-        #                     out_dir=out_dir)
-        #         axes.append(ax)
+            # insert extra space where new group starts
+            for i in range(1, len(data_df)):
+                if data_df[groupby][i] != data_df[groupby][i-1]:
+                    offset[i:] += max_range/6                    
+    
+        data_df[wvls] = (data_df[wvls].T + offset).T
 
-        if cfg.TIME_IT:
-            toc = time.perf_counter()
-            print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+        # get the last finite reflectance value of each row
+        level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])).tolist()        
+        label = (data_df['Data ID']).tolist()
+        maxima = data_df[wvls].max(axis=1)
 
-        return axes
+        new_level = level.copy()
+        new_label = label.copy()
+             
+        i = 1
+        c = 1
+        while c < len(data_df):
+            if data_df[groupby][c] != data_df[groupby][c-1]:
+                # insert the groupby label at the start of the new group
+                new_level.insert(i, level[c-1] + max_range/4)
+                new_label.insert(i, data_df[groupby][c-1])
+                # now the i counter is out of sync, so make it in sync
+                i += 1
+            i += 1
+            c +=1
+        # fix missing groupby label at the end
+        new_level.append(level[-1] + max_range/4)
+        new_label.append(data_df[groupby].iloc[-1])
+
+        annotations = pd.DataFrame(data={'level':new_level, 'label':new_label})        
+
+        return data_df, offset, annotations
 
     def render_profile_plot(self,
             data_df: pd.DataFrame,
@@ -222,9 +184,9 @@ class SpectralLibraryAnalyser():
         if scope == 'all':
             # title is the project name
             title = 'All Entries by ' + groupby
-            filename = f'{title}_{groupby.lower()}_profile_plot'
+            filename = f'all_entries_by_{groupby.lower()}_profile_plot'
         else:
-            title = scope
+            title = scope.title()
             filename = f'{scope}_{groupby.lower()}'
 
         if stacked:
@@ -239,8 +201,8 @@ class SpectralLibraryAnalyser():
 
         # need to worry about noise at some point, but not right now.
 
-        if len(data_df) == 1: # don't stack if only one entry
-            stacked = False
+        # if len(data_df['Data ID'].unique()) == 1: # don't stack if only one entry
+        #     stacked = False
 
         if stacked:
             data_df, offset, annotations = SpectralLibraryAnalyser.stack_spectra(data_df, self.wvls)
@@ -248,13 +210,17 @@ class SpectralLibraryAnalyser():
         # long form version of plotting, to aggregate data
         data_df =pd.melt(data_df, id_vars=['Data ID',groupby]) # do we need group, subgroup, species?
 
+        # set up the plot
         sns.set_context("paper")
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
 
         width_factor = 1 + 0.3
         height_factor = 1
         if stacked:
             # stretch the vertical axis of the plot
-            height_factor = np.floor(data_df['value'].max()/5)        
+            height_factor = max(np.floor(data_df['value'].max()/5), height_factor)
             width_factor = width_factor * 1.2
 
         fig_size = (width_factor*cfg.FIG_SIZE[0], height_factor*cfg.FIG_SIZE[1])
@@ -299,6 +265,7 @@ class SpectralLibraryAnalyser():
 
         ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)')
+        ax.set_ylim(0, data_df.value.max()*1.01)
 
         if stacked:
             ax.set_ylabel('Stacked Reflectance')
@@ -331,23 +298,25 @@ class SpectralLibraryAnalyser():
         #             bbox_to_anchor=(1.02, 1.0),
         #             # ncol=n_cols # remove number of columns from the legend
         #             )
+        
+        sns.despine(ax=ax, right=True, top=True)
 
         if stacked:
             # despine the plot
-            sns.despine(ax=ax, right=True, top=True)
             # annotate the spectra with the Data ID
             # get legend labels
             handles, labels = ax.get_legend_handles_labels()
             for idx, annotation in annotations.iterrows():
                 if annotation['label'] in labels:
+                    # if a group label make text bigger and same colour as lines
                     ax.text(
                         cfg.SAMPLE_RES['wvl_max']+20, 
                         annotation['level'], 
-                        annotation['label'].capitalize(), 
+                        annotation['label'].title(), 
                         # colour it the same as the line
                         color=handles[labels.index(annotation['label'])].get_color(),
                         fontsize=cfg.LEGEND_S+1, 
-                        va='center')                 
+                        va='bottom')                 
                 else:
                     ax.text(
                         cfg.SAMPLE_RES['wvl_max']+20, 
@@ -436,67 +405,247 @@ class SpectralLibraryAnalyser():
 
         return ax
 
-    @staticmethod
-    def stack_spectra(data_df: pd.DataFrame, wvls: List, offset: pd.Series=None) -> pd.DataFrame:
-        """Stack the spectra of the dataframe for plotting.
+    def plot_profiles(self,
+            scope: Literal[
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',         
+            groupby: Literal[
+                'Library', # hue/style by library
+                'Category', # hue/style by category
+                'Group', # hue/style by group
+                'Subgroup', # hue/style by subgroup
+                'Species', # hue/style by species
+                'Sample ID', # hue/style by Sample ID
+                'Data ID' # hue/style by Data ID
+                ]='category',   
+            stacked: bool=False,
+            ci: bool=False,
+            with_noise: bool=False,
+            hires_under: bool=False,
+            out_dir: Union[bool, str]=False
+            ) -> plt.Axes:
+        """Plot the profiles of the materials of the spectral library
+        """
+        if cfg.TIME_IT:
+            tic = time.perf_counter()
+            print('Plotting reflectance profiles of materials...')
 
-        :param data_df: Reflectance data to be stacked
-        :type data_df: pd.DataFrame
-        :return: Stacked Reflectance data
-        :rtype: pd.DataFrame
-        """        
-        # apply offsets to reflectance
+        axes = []
+        if scope == 'all':
+            # get the reflectance data for whole dataset
+            refl_df = self.spectra_obj.get_refl_df()
+            # get the category and group labels
+            cat_df = self.spectra_obj.get_cat_df()
+            label_df = self.spectra_obj.get_label_df()
+            groupby_df = pd.concat([cat_df, label_df], axis=1)
 
-        # sort categories by alphabetical order
-        # get groupby from data_df
-        groupby = data_df.columns[-1]
-        data_df = data_df.sort_values(by=[groupby, 'Data ID'], ascending=False)
+            # incorporate error DF into this data for plotting
+            all_df = pd.concat([refl_df, groupby_df[groupby]], axis=1)
+            
+            ax = self.render_profile_plot(
+                        all_df,
+                        scope=scope,
+                        groupby=groupby,
+                        stacked=stacked,
+                        with_noise=with_noise,
+                        hires_under=hires_under,
+                        ci=ci)
+            axes.append(ax)
+
+            if cfg.TIME_IT:
+                toc = time.perf_counter()
+                print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
+            return ax
         
-        # reset index
-        data_df = data_df.reset_index(drop=True)
+        if scope == 'libraries':
+            # get the reflectance data for each library in the dataset
+            libraries = self.spectra_obj.main_df['Library'].unique().tolist()
+            for scope in libraries:
+                subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df['Library']==scope]
+                refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
+                # get the category and group labels
+                groupby_df = subset_df.loc[:, groupby]
+
+                # incorporate error DF into this data for plotting
+                all_df = pd.concat([refl_df, groupby_df], axis=1)
+                
+                ax = self.render_profile_plot(
+                            all_df,
+                            scope=scope,
+                            groupby=groupby,
+                            stacked=stacked,
+                            with_noise=with_noise,
+                            hires_under=hires_under,
+                            ci=ci)
+                axes.append(ax)
+
+                if cfg.TIME_IT:
+                    toc = time.perf_counter()
+                    print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
+            return axes
         
-        if offset is None:
-            # get minima
-            minima = data_df[wvls].min(axis=1)
-            maxima = data_df[wvls].max(axis=1)
-            spec_range = maxima - minima
-            max_range = (spec_range).max()
+        if scope == 'categories':
+            # get the reflectance data for each category in the dataset
+            categories = self.spectra_obj.main_df['Category'].unique().tolist()
+            for scope in categories:
+                subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df['Category']==scope]
+                refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
+                # get the category and group labels
+                groupby_df = subset_df.loc[:, groupby]
 
-            # offset the reflectance
-            offset = (data_df.index.values + 1) * max_range - spec_range/2 - minima
+                # incorporate error DF into this data for plotting
+                all_df = pd.concat([refl_df, groupby_df], axis=1)
+                
+                ax = self.render_profile_plot(
+                            all_df,
+                            scope=scope,
+                            groupby=groupby,
+                            stacked=stacked,
+                            with_noise=with_noise,
+                            hires_under=hires_under,
+                            ci=ci)
+                axes.append(ax)
 
-            # insert extra space where new group starts
-            for i in range(1, len(data_df)):
-                if data_df[groupby][i] != data_df[groupby][i-1]:
-                    offset[i:] += max_range/2                    
+                if cfg.TIME_IT:
+                    toc = time.perf_counter()
+                    print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
+            return axes
+        
+        if scope == 'groups':
+            # get the reflectance data for each group in the dataset
+            groups = self.spectra_obj.main_df['Group'].unique().tolist()
+            for scope in groups:
+                subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df['Group']==scope]
+                refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
+                # get the category and group labels
+                groupby_df = subset_df.loc[:, groupby]
+
+                # incorporate error DF into this data for plotting
+                all_df = pd.concat([refl_df, groupby_df], axis=1)
+                
+                ax = self.render_profile_plot(
+                            all_df,
+                            scope=scope,
+                            groupby=groupby,
+                            stacked=stacked,
+                            with_noise=with_noise,
+                            hires_under=hires_under,
+                            ci=ci)
+                axes.append(ax)
+
+                if cfg.TIME_IT:
+                    toc = time.perf_counter()
+                    print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
+            return axes
+        
+        if scope == 'subgroups':
+            # get the reflectance data for each subgroup in the dataset
+            categories = self.spectra_obj.main_df['Subgroup'].unique().tolist()
+            for scope in categories:
+                subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df['Subgroup']==scope]
+                refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
+                # get the category and group labels
+                groupby_df = subset_df.loc[:, groupby]
+
+                # incorporate error DF into this data for plotting
+                all_df = pd.concat([refl_df, groupby_df], axis=1)
+                
+                ax = self.render_profile_plot(
+                            all_df,
+                            scope=scope,
+                            groupby=groupby,
+                            stacked=stacked,
+                            with_noise=with_noise,
+                            hires_under=hires_under,
+                            ci=ci)
+                axes.append(ax)
+
+                if cfg.TIME_IT:
+                    toc = time.perf_counter()
+                    print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
+            return axes
     
-        data_df[wvls] = (data_df[wvls].T + offset).T
+        if scope == 'species':
+            # get the reflectance data for each species in the dataset
+            species = self.spectra_obj.main_df['Species'].unique().tolist()
+            for scope in species:
+                subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df['Species']==scope]
+                refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
+                # get the category and group labels
+                groupby_df = subset_df.loc[:, groupby]
 
-        # get the last finite reflectance value of each row
-        level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])).tolist()        
-        label = (data_df['Data ID']).tolist()
+                # incorporate error DF into this data for plotting
+                all_df = pd.concat([refl_df, groupby_df], axis=1)
+                
+                ax = self.render_profile_plot(
+                            all_df,
+                            scope=scope,
+                            groupby=groupby,
+                            stacked=stacked,
+                            with_noise=with_noise,
+                            hires_under=hires_under,
+                            ci=ci)
+                axes.append(ax)
 
-        new_level = level.copy()
-        new_label = label.copy()
-             
-        i = 1
-        c = 1
-        while c < len(data_df):
-            if data_df[groupby][c] != data_df[groupby][c-1]:
-                # insert the groupby label at the start of the new group
-                new_level.insert(i, level[c-1] + max_range/2)
-                new_label.insert(i, data_df[groupby][c-1])
-                # now the i counter is out of sync, so make it in sync
-                i += 1
-            i += 1
-            c +=1
-        # fix missing groupby label at the end
-        new_level.append(level[-1] + max_range/2)
-        new_label.append(data_df[groupby].iloc[-1])
+                if cfg.TIME_IT:
+                    toc = time.perf_counter()
+                    print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
 
-        annotations = pd.DataFrame(data={'level':new_level, 'label':new_label})        
+            return axes
+        
+        # if scope == 'categories':
+        #         # get data for category
+        #         refl_df = self.spectra_obj.get_refl_df(cat)
+        #         cat_series = self.spectra_obj.get_cat_df(cat)
+        #         cat_df = pd.concat([refl_df, cat_series], axis=1)
+        #         ax = self.render_profile_plot(
+        #                     cat_df,
+        #                     scope=scope,
+        #                     stacked=stacked,
+        #                     with_noise=with_noise,
+        #                     ci=ci,
+        #                     hires_under=hires_under,
+        #                     out_dir=out_dir)
+        #         axes.append(ax)
 
-        return data_df, offset, annotations
+
+        # # plot for each category and Species
+        # for cat in self.spectra_obj.categories:
+        #     mineral_list = self.spectra_obj.get_mineral_list(cat, unique=True)
+        #     for mnrl in mineral_list:
+        #         # get data for category and mineral
+        #         refl_df = self.spectra_obj.get_refl_df(cat, mnrl)
+        #         cat_df = self.spectra_obj.get_cat_df(cat, mnrl)
+        #         cat_mnrl_df = pd.concat([refl_df, cat_df], axis=1)
+        #         ax = self.render_profile_plot(
+        #                     cat_mnrl_df,                                              
+        #                     cat=cat,
+        #                     mnrl=mnrl,
+        #                     stacked=stacked,
+        #                     scope=scope,
+        #                     with_noise=with_noise,
+        #                     ci=ci,
+        #                     hires_under=hires_under,
+        #                     out_dir=out_dir)
+        #         axes.append(ax)
+
+        if cfg.TIME_IT:
+            toc = time.perf_counter()
+            print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+
+        return axes
 
     # """
     # Spectrogram Visualisation & Continuum Removal

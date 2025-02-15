@@ -701,7 +701,11 @@ class MaterialCollection():
 
     def get_refl_df(self,
             category: str = None,
-            mineral_name: str = None) -> pd.DataFrame:
+            library: str = None,
+            group: str = None,
+            subgroup: str = None,            
+            species: str = None,
+            sample_id: str = None) -> pd.DataFrame:
         """Return a copy of the reflectance dataframe subset of the array.
         Allows for selection of data from specific category and mineral type.
 
@@ -712,13 +716,23 @@ class MaterialCollection():
         :return: reflectance data only of the material collection
         :rtype: pd.DataFrame
         """
-        subset_df = self.get_subset_df(category, mineral_name)
+        subset_df = self.get_subset_df(
+                            category, 
+                            library,
+                            group,
+                            subgroup,
+                            species,
+                            sample_id)
         refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
         return refl_df
 
     def get_subset_df(self,
             category: str = None,
-            species: str = None) -> pd.DataFrame:
+            library: str = None,
+            group: str = None,
+            subgroup: str = None,            
+            species: str = None,
+            sample_id: str = None) -> pd.DataFrame:
         """Return a subset of the dataframe, according to selection
         from specific category and species.
 

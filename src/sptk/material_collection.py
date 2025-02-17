@@ -932,9 +932,7 @@ class MaterialCollection():
                     stacked: bool=False,
                     scope: str='all', 
                     groupby: str='Category',
-                    ci: bool=False,
-                    with_noise: bool=False,
-                    hires_under: bool=False,
+                    ci: bool=False
                     ) -> plt.Axes:
         """Plot the profiles of the materials
         """
@@ -943,9 +941,8 @@ class MaterialCollection():
                         stacked=stacked,
                         scope=scope,
                         groupby=groupby,
-                        ci=ci,
-                        with_noise=with_noise,
-                        hires_under=hires_under)
+                        ci=ci
+                        )
         return axes
     
     def render_colour(self, 

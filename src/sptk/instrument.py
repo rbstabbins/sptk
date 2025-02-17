@@ -352,6 +352,7 @@ class Instrument():
         """Plot all filter profiles
         """
         print('Plotting Instrument Transmission...')
+
         if 'snr' in self.main_df.columns:
             trans_df = pd.melt(self.main_df.reset_index(),
                                 id_vars=['cwl', 'fwhm', 'snr','filter_id'])
@@ -359,101 +360,350 @@ class Instrument():
             trans_df = pd.melt(self.main_df.reset_index(),
                                 id_vars=['cwl', 'fwhm', 'filter_id'])
         fltr_ax_size = (1.3*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+        
         fig, fltr_ax = plt.subplots(figsize=fltr_ax_size, dpi=cfg.DPI)
-        plt.rcParams.update({'font.size': 8})
+        
+        # set up the plot
+        sns.set_context("paper")
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
+        sns.despine(ax=fltr_ax, right=True, top=True)
+        # plt.rcParams.update({'font.size': 8})
+        
         fltr_ax.set(
             xbound=(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10),
             ybound=(-0.05,1.15),
-            autoscale_on=False)
+            autoscale_on=False)        
         
-        # # set colours for the filters        
-        # norm_trans = self.get_trans_df().T
-        # sds = colour.MultiSpectralDistributions(norm_trans)    
-        # # normalise the spds
-        # # sds = sds / np.sum(sds, axis=1)[:,None]
-            
-        # illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
-        # xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1.0)/100 # convert to XYZ space
-        # # xyz = xyz / np.sum(xyz, axis=1)[:,None]
-        # # xyz = xyz.clip(0,100) # clip to 0-1 range
-        # rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB    
-        # rgb = rgb.clip(0,1) # clip to 0-1 range
-            
-        # # if np.any(rgb < 0):
-        # #     # We're not in the RGB gamut: approximate by desaturating
-        # #     w = - np.min(rgb, axis=0)
-        # #     rgb = rgb + w
-        # if not np.all(rgb==0):
-        #     # Normalize the rgb vector
-        #     rgb /= np.max(rgb)
+        # TODO colour code the filters in a more appropriate way
+        if self.filter_ids[0][0] != 'S':
+            # set colours for the filters        
+            norm_trans = self.get_trans_df().T
+            sds = colour.MultiSpectralDistributions(norm_trans)    
+            # normalise the spds
+            # sds = sds / np.sum(sds, axis=1)[:,None]
+                
+            illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
+            xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1.0)/100 # convert to XYZ space
+            # xyz = xyz / np.sum(xyz, axis=1)[:,None]
+            # xyz = xyz.clip(0,100) # clip to 0-1 range
+            rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB    
+            rgb = rgb.clip(0,1) # clip to 0-1 range
+                
+            # if np.any(rgb < 0):
+            #     # We're not in the RGB gamut: approximate by desaturating
+            #     w = - np.min(rgb, axis=0)
+            #     rgb = rgb + w
+            if not np.all(rgb==0):
+                # Normalize the rgb vector
+                rgb /= np.max(rgb)
 
-        # just do central wavelength to XYZ
-        # xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
-        # colour.plotting.plot_single_sd(sds[:,0])
+            # just do central wavelength to XYZ
+            xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
+            colour.plotting.plot_single_sd(sds[:,0])
 
-        # cwl_colours = sns.color_palette(rgb)
+            cwl_colours = sns.color_palette(rgb)
+        else:
+            cwl_colours = 'husl'
 
+        # if instrument is a spectrometer, select subset of wavelengths
+        # if filter ids start with S then it's a spectrometer
+        if self.filter_ids[0][0] == 'S':
+            # select first and last wavelengths, then middle
+            sns.lineplot(
+                data=trans_df,
+                x='variable',
+                y='value',
+                ax=fltr_ax,
+                hue='filter_id',
+                alpha=0.5,
+                palette="husl",
+                linewidth=0.6,
+                legend=False)
+
+
+            cwls = self.cwls()[[0, len(self.cwls())//2, -1]].unique()
+            trans_df = trans_df[trans_df['cwl'].isin(cwls)]
+            filter_ids = trans_df.filter_id.unique()
+            fwhms = trans_df.fwhm.unique()
+        else:
+            cwls = self.cwls().to_numpy()
+            filter_ids = self.filter_ids
+            fwhms = self.fwhms().unique()
+                
         sns.lineplot(
             data=trans_df,
             x='variable',
             y='value',
             ax=fltr_ax,
             hue='filter_id',
-            # palette=cwl_colours,
+            palette=cwl_colours,
             linewidth=0.6,
             legend="full")
+        
         fltr_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         fltr_ax.set_ylabel('Transmission', fontsize=cfg.LABEL_S)
         fltr_ax.set_title(
-                f'Transmission Profiles ({self.name})', fontsize=cfg.TITLE_S)
-        # add minor grid lines at 50 nm intervals and major gridlines
-        fltr_ax.get_xaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
+                f'{self.name.title()} Transmission Profiles', fontsize=cfg.TITLE_S)
+        
+        # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
+        # or minor at 100 and major at 500, depending on spectral range
+        spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
+        if spec_range <= 1000:
+            fltr_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(50))
+            fltr_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(100))
+        elif spec_range <= 5000:
+            fltr_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(100))
+            fltr_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(500))
+        else:
+            fltr_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
+            fltr_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
+
         fltr_ax.grid(True, which='major',axis='both', lw=0.6)
         fltr_ax.grid(True, which='minor',axis='both', lw=0.3)
+
+        # Set the font name for axis tick labels to be Comic Sans
+        for tick in fltr_ax.get_xticklabels():
+            tick.set_fontname("Arial")
+        for tick in fltr_ax.get_yticklabels():
+            tick.set_fontname("Arial")
+
         label_params = fltr_ax.get_legend_handles_labels()
 
-        if len(self.main_df['cwl']) > 12:
-            fltr_ax.get_legend().remove()
-        else:
-            labels = (self.main_df['cwl'].astype('str') + '±'
-                    + (self.main_df['fwhm']/2).astype('str')+' nm').to_list()
-            n_ids = len(labels)
-            new_label_params = (label_params[0], labels)
-            fltr_ax.legend(*new_label_params,
-                    loc='center left', bbox_to_anchor=(1, 0.5),
-                    ncol=-(-n_ids // 20),
-                    fontsize=cfg.LEGEND_S)
-        # TODO colour code the filters in a more appropriate way
-        for fltr_id in self.main_df.index.to_list():
+        labels = ["%s\n%.0f±%.1f nm" % (filter_id, cwl, fwhm) for filter_id, cwl, fwhm in zip(filter_ids, cwls, fwhms)]
+
+        if self.filter_ids[0][0] == 'S':
+            # insert '...' between labels
+            labels.insert(1, '...')
+            labels.insert(3, '...')
+            blank = mpl.patches.Rectangle((0,0), 1, 1, fill=False, edgecolor='none',visible=False)
+            label_params[0].insert(1, blank)
+            label_params[0].insert(3, blank)
+
+        n_ids = len(labels)
+        new_label_params = (label_params[0], labels)
+        fltr_ax.legend(*new_label_params,
+                loc='center left', bbox_to_anchor=(1, 0.5),
+                fontsize=cfg.LEGEND_S)
+               
+        if self.filter_ids[0][0] == 'S':
+            # insert '...' between labels
+            filter_ids = np.insert(filter_ids,1, '  ...')
+            filter_ids = np.insert(filter_ids, 3, '  ...')            
+            cwls = np.insert(cwls, 1, cwls[0]+(cwls[1]-cwls[0])/2) 
+            cwls = np.insert(cwls, 3, cwls[2]+(cwls[3]-cwls[2])/2)
+
+        for f, fltr_id in enumerate(filter_ids):
             fltr_ax.annotate(
                 fltr_id,
-                (self.main_df.loc[fltr_id,'cwl'], 1.02),
+                (cwls[f], 1.02),
                 ha='left',
                 annotation_clip=False,
+                fontsize=cfg.LEGEND_S,
                 rotation=60)
+            
         plt.tight_layout()
         output_file = Path(self.object_dir, self.name).with_suffix(cfg.PLT_FRMT)
         fig.savefig(output_file)
 
-        if len(self.main_df['cwl']) > 12:
-            # make table of cwl and fwhm
-            figl, axl = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-            axl.axis(False)
-            labels = (self.main_df.index.astype('str') + ', '
-                        + self.main_df['cwl'].astype('str') + ' nm, ∆'
-                        + self.main_df['fwhm'].astype('str')+' nm').to_list()
-            n_ids = len(labels)
-            new_label_params = (label_params[0], labels)
-            axl.legend(*new_label_params, loc="center",
-                    bbox_to_anchor=(0.5, 0.5),
-                    ncol=-(-n_ids // 20),
-                    fontsize=cfg.LEGEND_S)
-            plt.tight_layout()
-            output_file = Path(self.object_dir,
-                                self.name+'_lgnd').with_suffix(cfg.PLT_FRMT)
-            figl.savefig(output_file)
+        print('Plots exported to '+str(Path(self.object_dir)))
+
+        return fig, fltr_ax
+
+    def plot_spectral_resolution(self):
+        """Plot the spectral power resolution of the instrument as a function 
+        of cwl
+        """   
+
+        print('Plotting Spectral Resolution...')
+        # set up the plot
+        sns.set_context("paper")
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
+        sns.despine(right=True, top=True)
+        # plt.rcParams.update({'font.size': 8})
+        
+        fig, res_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        
+        
+        spectral_resolution = self.cwls() / self.fwhms() 
+
+        res_ax.set(
+            xbound=(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10),
+            ybound=(0, 1.1*np.max(spectral_resolution)),
+            autoscale_on=False)        
+        
+        sns.lineplot(
+            x=self.cwls(),
+            y=spectral_resolution,
+            ax=res_ax)
+        
+        res_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
+        res_ax.set_ylabel('Spectral Resolving Power', fontsize=cfg.LABEL_S)
+        res_ax.set_title(
+                f'{self.name.title()} Spectral Resolution', fontsize=cfg.TITLE_S)
+        
+        # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
+        # or minor at 100 and major at 500, depending on spectral range
+        spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
+        if spec_range <= 1000:
+            res_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(50))
+            res_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(100))
+        elif spec_range <= 5000:
+            res_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(100))
+            res_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(500))
+        else:
+            res_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
+            res_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
+
+        res_ax.grid(True, which='major',axis='both', lw=0.6)
+        res_ax.grid(True, which='minor',axis='both', lw=0.3)
+
+        # Set the font name for axis tick labels to be Comic Sans
+        for tick in res_ax.get_xticklabels():
+            tick.set_fontname("Arial")
+        for tick in res_ax.get_yticklabels():
+            tick.set_fontname("Arial")
+
+        plt.tight_layout()
+
+        output_file = Path(self.object_dir, self.name+'_spectral_resolution').with_suffix(cfg.PLT_FRMT)
+
+        fig.savefig(output_file)
 
         print('Plots exported to '+str(Path(self.object_dir)))
+
+        return fig, res_ax
+
+    def plot_fwhm(self):
+        """Plot the full-width at half-maximum of the instrument as a function
+        of cwl
+        """
+
+        print('Plotting FWHM...')
+        # set up the plot
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
+        sns.despine(right=True, top=True)
+
+        fig, fwhm_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+
+        fwhms = self.fwhms()
+
+        fwhm_ax.set(
+            xbound=(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10),
+            ybound=(0, 1.1*np.max(fwhms)),
+            autoscale_on=False)
+
+        sns.lineplot(
+            x=self.cwls(),
+            y=fwhms,
+            ax=fwhm_ax)
+
+        fwhm_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
+        fwhm_ax.set_ylabel('FWHM (nm)', fontsize=cfg.LABEL_S)
+        fwhm_ax.set_title(
+                f'{self.name.title()} FWHM', fontsize=cfg.TITLE_S)
+
+        # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
+        # or minor at 100 and major at 500, depending on spectral range
+        spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
+        if spec_range <= 1000:
+            fwhm_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(50))
+            fwhm_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(100))
+        elif spec_range <= 5000:
+            fwhm_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(100))
+            fwhm_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(500))
+        else:
+            fwhm_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
+            fwhm_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
+
+        fwhm_ax.grid(True, which='major',axis='both', lw=0.6)
+        fwhm_ax.grid(True, which='minor',axis='both', lw=0.3)
+
+        # Set the font name for axis tick labels to be Comic Sans
+        for tick in fwhm_ax.get_xticklabels():
+            tick.set_fontname("Arial")
+        for tick in fwhm_ax.get_yticklabels():
+            tick.set_fontname("Arial")
+
+        plt.tight_layout()
+
+        output_file = Path(self.object_dir, self.name+'_fwhms').with_suffix(cfg.PLT_FRMT)
+
+        fig.savefig(output_file)
+
+        print('Plots exported to '+str(Path(self.object_dir)))
+
+        return fig, fwhm_ax
+    
+    def plot_snr(self):
+        """Plot the signal-to-noise ratio of the instrument as a function
+        of cwl
+        """   
+
+        print('Plotting Signal-to-Noise Ratio...')
+
+        # set up the plot
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
+        sns.despine(right=True, top=True)
+
+        fig, snr_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+
+        snrs = self.main_df['snr']
+
+        snr_ax.set(
+            xbound=(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10),
+            ybound=(0, 1.1*np.max(snrs)),
+            autoscale_on=False)
+
+        sns.lineplot(
+            x=self.cwls(),
+            y=snrs,
+            ax=snr_ax)
+        
+        snr_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
+        snr_ax.set_ylabel('Signal-to-Noise Ratio', fontsize=cfg.LABEL_S)
+        snr_ax.set_title(
+                f'{self.name.title()} Signal-to-Noise Ratio', fontsize=cfg.TITLE_S)
+
+        # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
+        # or minor at 100 and major at 500, depending on spectral range
+        spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
+        if spec_range <= 1000:
+            snr_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(50))
+            snr_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(100))
+
+        elif spec_range <= 5000:
+            snr_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(100))
+            snr_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(500))
+        else:
+            snr_ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
+            snr_ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
+
+        snr_ax.grid(True, which='major',axis='both', lw=0.6)
+        snr_ax.grid(True, which='minor',axis='both', lw=0.3)
+
+        # Set the font name for axis tick labels to be Comic Sans
+        for tick in snr_ax.get_xticklabels():
+           tick.set_fontname("Arial")
+        for tick in snr_ax.get_yticklabels():
+            tick.set_fontname("Arial")
+
+        plt.tight_layout()
+
+        output_file = Path(self.object_dir, self.name+'_snr').with_suffix(cfg.PLT_FRMT)
+
+        fig.savefig(output_file)
+
+        print('Plots exported to '+str(Path(self.object_dir)))
+
+        return fig, snr_ax     
 
     def export_main_df(self):
         """Export the Instrument Transmission to CSV and Pickle."""
@@ -480,7 +730,8 @@ class InstrumentBuilder:
             instrument_type: str,
             sampling: Union[int, str],
             resolution: float,
-            spectral_range: List=None
+            spectral_range: List,
+            snr_range: List, # just specify the start and end SNR for now - simple
         ) -> None:
 
         self.name = instrument_name
@@ -488,6 +739,7 @@ class InstrumentBuilder:
         self.sampling = sampling
         self.resolution = resolution
         self.spectral_range = spectral_range
+        self.snr_range = snr_range
 
         self.main_df = self.build_instrument()
 
@@ -584,11 +836,15 @@ class InstrumentBuilder:
             filter_id = f'S{i:03d}'
             filter_ids.append(filter_id)
             cwl = cwl + (fwhm * fwhm_si)     
-            i+=1       
+            i+=1 
+
+        snrs = np.linspace(self.snr_range[0], self.snr_range[1], len(cwls))
+
         inst_df = pd.DataFrame(data={
                                     'filter_id':filter_ids,
                                     'cwl': cwls,
-                                    'fwhm': fwhms})
+                                    'fwhm': fwhms,
+                                    'snr': snrs})
         return inst_df
 
     def generate_aotf_band_table(self) -> pd.DataFrame:
@@ -636,10 +892,15 @@ class InstrumentBuilder:
             filter_ids.append(filter_id)
             cwl = cwl + (fwhm * fwhm_si)
             i+=1
+
+        snrs = np.linspace(self.snr_range[0], self.snr_range[1], len(cwls))
+
         inst_df = pd.DataFrame(data={
-                        'filter_id':filter_ids,
-                        'cwl': cwls,
-                        'fwhm': fwhms})
+                                    'filter_id':filter_ids,
+                                    'cwl': cwls,
+                                    'fwhm': fwhms,
+                                    'snr': snrs})
+    
         return inst_df
 
     def export_instrument(self, inst_df: pd.DataFrame) -> None:

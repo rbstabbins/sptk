@@ -910,17 +910,22 @@ class Observation():
         print('Observation export complete.')
 
     def plot_profiles(self, 
-                      stacked: bool=False,
-                      categories_only: bool=False, 
-                      ci: bool=False, 
-                      hires_under: bool=False) -> List[plt.Axes]:
-        """Plot the profiles of the materials as sampled by the instrument
+                    stacked: bool=False,
+                    scope: str='all', 
+                    groupby: str='Category',
+                    ci: bool=False,
+                    with_noise: bool=False,
+                    hires_under: bool=False,
+                    ) -> plt.Axes:
+        """Plot the profiles of the materials
         """
         plotter = SpectralLibraryAnalyser(self)
         axes = plotter.plot_profiles(
                         stacked=stacked,
-                        categories_only=categories_only, 
-                        ci=ci, 
+                        scope=scope,
+                        groupby=groupby,
+                        ci=ci,
+                        with_noise=with_noise,
                         hires_under=hires_under)
         return axes
     

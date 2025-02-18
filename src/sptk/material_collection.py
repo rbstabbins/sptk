@@ -24,21 +24,23 @@ import sptk.config as cfg
 from sptk.instrument import Instrument
 from sptk.spectral_library_analyser import SpectralLibraryAnalyser
 
+# metadata labels used in the MaterialCollection
 HEADER_LIST = [
-    'Sample ID', 
-    'Species',
-    'Subgroup',
-    'Group',
-    'Library',
-    'Sample Description', 
-    'Date Added', 
-    'Viewing Geometry',
-    'Other Information',  
-    'Composition',
-    'Resolution', 
-    'Grain Size', 
-    'Locality',
-    'Database of Origin']
+    'Sample ID', # the identifier for the physical sample observed
+    'Species',   # the mineral species (or e.g. 'patch' name of a colour chart)
+    'Subgroup',  # the mineral subgroup, following Mindat.org classification
+    'Group',     # the mineral group, following Mindat.org classification
+    'Library',   # the name of the spectral library from the '../data' directory
+    'Sample Description', # a description of the sample, copied from entry
+    'Date Added', # the date the sample was added to the spectral library
+    'Viewing Geometry', # incidence (i) and emission (e) angles of the measurement
+    'Other Information',  # misc
+    'Composition', # chemical formula of the sample, or expected for the mineral species
+    'Resolution', # the bandwidth of the spectrometer used to measure the sample
+    'Grain Size', # grain size information
+    'Locality', # the location where the sample was collected
+    'Database of Origin' # the database from which the sample was sourced
+    ] 
 
 class MaterialCollection():
     """Hosts material reflectance data and auxilary information in a DataFrame.
@@ -49,10 +51,10 @@ class MaterialCollection():
             material_dict: dict,
             spectral_library: str,
             project_name: str,
-            load_existing: bool = cfg.LOAD_EXISTING,
             balance_classes: bool=True,
             random_bias_seed: int = None,
             allow_out_of_bounds: bool=False,
+            load_existing: bool = cfg.LOAD_EXISTING,
             plot_profiles: bool = cfg.PLOT_PROFILES,
             export_df: bool = cfg.EXPORT_DF) -> None:
         """Constructor for MaterialCollection class
@@ -69,9 +71,6 @@ class MaterialCollection():
         :type spectral_library: str
         :param project_name: name of project and directory
         :type project_name: str
-        :param load_existing: instruct to use or overwrite existing directories
-            and files of the same project_name, defaults to config.py setting.
-        :type load_existing: bool, optional
         :param balance_classes: instruct whether to balance category sizes by
             randomly removing samples until category sizes are equal, defaults to
             True.
@@ -83,6 +82,9 @@ class MaterialCollection():
         :param allow_out_of_bounds: Instruct whether to include entries with
             wavelengths that do not cover the full range, defaults to False.
         :type allow_out_of_bounds: bool, optional
+        :param load_existing: instruct to use or overwrite existing directories
+            and files of the same project_name, defaults to config.py setting.
+        :type load_existing: bool, optional
         :param plot_profiles: plot material profiles to project directory,
             defaults to False
         :type plot_profiles: bool, optional
@@ -93,6 +95,7 @@ class MaterialCollection():
         if cfg.TIME_IT:
             tic = time.perf_counter()
 
+        # set MaterialCollection attributes
         self.project_dir, self.project_name = cfg.build_project_directory(
                                             project_name, 'material_collection')
         self.object_dir = Path(self.project_dir / 'material_collection')
@@ -104,24 +107,29 @@ class MaterialCollection():
         self.allow_out_of_bounds = allow_out_of_bounds
         self.header_list = HEADER_LIST
 
+        # find the existing pickle file of the MaterialCollection DataFrame,
+        # or make a new one from the material file dictionary
         if load_existing:
             existing_pkl_path = Path(
                     self.object_dir,
                     'material_collection').with_suffix('.pkl')
             file_exists = os.path.isfile(existing_pkl_path)
             if file_exists:
-                print(f"Loading existing {project_name} MaterialCollection DF")
+                print(f"Loading existing {project_name} MaterialCollection DataFrame")
                 self.main_df = pd.read_pickle(existing_pkl_path)
             else:
-                print(f"No existing {project_name} MaterialCollection DF")
+                print(f"No existing {project_name} MaterialCollection DataFrame")
                 print("Building new MaterialCollection")
                 self.main_df = self.build_new_material_collection()
         else:
             print(f"Building new {project_name} MaterialCollection DF")
             self.main_df = self.build_new_material_collection()
 
+        # apply class balancing if instructed
         if balance_classes:
             self.balance_class_sizes(random_state = random_bias_seed)
+
+        # plot profiles and export DataFrames if instructed
         if plot_profiles:
             plotter = SpectralLibraryAnalyser(self)
             plotter.plot_profiles()
@@ -188,9 +196,12 @@ class MaterialCollection():
                 errno.ENOENT, os.strerror(errno.ENOENT), str(data_library))
 
         # mapping the library
-        groups = {os.path.basename(dir): dir for dir in glob.glob(str(data_library)+'*/*', recursive=True)}
-        subgroups = {os.path.basename(dir): dir for dir in glob.glob(str(data_library)+'*/*/*', recursive=True)}
-        species = {os.path.basename(dir): dir for dir in glob.glob(str(data_library)+'*/*/*/*', recursive=True)}
+        groups = {os.path.basename(dir): dir 
+                for dir in glob.glob(str(data_library)+'*/*', recursive=True)}
+        subgroups = {os.path.basename(dir): dir 
+                for dir in glob.glob(str(data_library)+'*/*/*', recursive=True)}
+        species = {os.path.basename(dir): dir 
+                for dir in glob.glob(str(data_library)+'*/*/*/*', recursive=True)}
         
         # initialise the filename dictionary
         file_dict = {}
@@ -277,20 +288,20 @@ class MaterialCollection():
                     species = path_list.pop(0)
                 else:
                     species = None
-
+                cat = main_df[main_df.Filepath == filepath].Category.to_numpy()[0]
                 if not self.allow_out_of_bounds:
                     has_nan = np.isnan(np.sum(new_entry[cfg.WVLS].to_numpy()))
                     if has_nan:
-                        print(f'{data_id} ({species} {subgroup} {group} {self.spectral_library}) does not span wavelength range, removing...')
+                        print(f'{cat.title()}: {data_id} ({species.title()}) does not span wavelength range, removing...')
                         main_df.drop(
                             main_df[main_df.Filepath == filepath].index,
                             inplace=True)
                     else:
-                        print(f'{data_id} ({species} {subgroup} {group} {self.spectral_library}) loaded')
+                        print(f'{cat.title()}: {data_id} ({species.title()}) loaded')
                         main_df.loc[main_df.Filepath == filepath,
                                         new_entry.columns] = new_entry.values
                 else:
-                    print(f'{data_id} ({species} {subgroup} {group} {self.spectral_library}) loaded')
+                    print(f'{cat.title()}: {data_id} ({species.title()}) loaded')
                     main_df.loc[main_df.Filepath == filepath,
                                     new_entry.columns] = new_entry.values
         # add the group, subgroup, species to the main_df
@@ -436,6 +447,7 @@ class MaterialCollection():
         # except KeyError:
 
         #  always use species + filename as Data ID
+        # no don't do this - but make a label for it when plotting...
         hdr.loc['Data ID'] = species.capitalize() + ' ' +data_id
         # should we be taking sample id from filename?
 

@@ -29,8 +29,11 @@ WVLS = np.arange(
 PLOT_PROFILES = True
 # INLINE = False # produce plots inline - i.e. for notebook
 CM = 1/2.54  # set scale factor for specifying fig size in cms
-FIG_SIZE = (8*CM, 7*CM)
-DPI = 300
+# Figure size: set to width of standard journal column in CM: 80mm minimum 
+# for Wiley. For double width figures, just multiply by 2 in the code.
+# For height, have set aspect of 1:1. Adjust as necessary.
+FIG_SIZE = (8*CM, 8*CM) 
+DPI = 600
 PLT_FRMT = '.pdf' # '.png' or '.pdf' or '.eps' etc.
 LABEL_S = 8
 TITLE_S = 10

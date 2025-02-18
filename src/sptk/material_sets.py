@@ -71,11 +71,11 @@ MICA_SET = {
         ('kieserite', '*'),
         ('alunite', '*'),
         ('jarosite', '*'),
-        ('magnesium-sulphate', '*'),
+        ('mg-sulphate', '*'),
         ('gypsum', '*'),
         ('bassanite', '*')
     ],
-    'phyllosilicate': [
+    'phyllosilicates': [
         ('montmorillonite', '*'),
         ('kaolinite', '*'),
         ('margarite', '*'),

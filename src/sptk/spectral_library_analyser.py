@@ -105,20 +105,27 @@ class SpectralLibraryAnalyser():
             max_range = (spec_range).max()
 
             # offset the reflectance
-            offset = (data_df.index.values + 1) * max_range - minima - spec_range/2
+            padding =  max_range/4
+            spec_range[spec_range < padding] = padding
+            offset = - minima + (spec_range +padding/2).cumsum().shift(periods=1, fill_value = 0) + padding/2
 
             # insert extra space where new group starts
             for i in range(1, len(data_df)):
                 if data_df[groupby][i] != data_df[groupby][i-1]:
-                    offset[i:] += max_range/6  
+                    offset[i:] += 2*padding  
         else:
             max_range = 0 # hack              
     
         data_df[wvls] = (data_df[wvls].T + offset).T
 
         # get the last finite reflectance value of each row
-        level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])).tolist()        
+        level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])).tolist()  
+        # get the max reflectance value of each row
+        groupby_level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].max())).tolist()
+
         label = (data_df['Data ID']).tolist()
+        # replace space with '\n' in the label
+        label = [l.replace(' ', '\n') for l in label]
         maxima = data_df[wvls].max(axis=1)
 
         new_level = level.copy()
@@ -131,14 +138,14 @@ class SpectralLibraryAnalyser():
             if data_df[groupby][c] != data_df[groupby][c-1]:
                 # insert the groupby label at the start of the new group
                 # get font heigh in data units                
-                new_level.insert(i, level[c-1] + max_range/4)
+                new_level.insert(i, groupby_level[c-1]) #level[c-1] + max_range/4)
                 new_label.insert(i, data_df[groupby][c-1])
                 # now the i counter is out of sync, so make it in sync
                 i += 1
             i += 1
             c +=1
         # fix missing groupby label at the end
-        new_level.append(level[-1] + max_range/4)
+        new_level.append(groupby_level[-1])
         new_label.append(data_df[groupby].iloc[-1])
 
         annotations = pd.DataFrame(data={'level':new_level, 'label':new_label})        
@@ -194,7 +201,7 @@ class SpectralLibraryAnalyser():
             filename = f'{scope}_{groupby.lower()}'
 
         if stacked:
-            title = title + ' Stacked'
+            title = title
             filename = filename + '_stacked'
 
         if with_noise: # worry about this for observations
@@ -225,15 +232,15 @@ class SpectralLibraryAnalyser():
         plt.rcParams['font.family'] = 'sans-serif'
         plt.rcParams['font.sans-serif'] = 'Futura'
 
-        width_factor = 1 + 0.3
-        height_factor = 1
+        width_factor = 1 # + 0.3
+        height_factor = 1 #1.1 # allow for legend at bottom
         if stacked:
             # stretch the vertical axis of the plot
             height_factor = max(np.floor(data_df['value'].max()/5), height_factor)
-            width_factor = width_factor * 1.2
+            width_factor = width_factor # * 1.2
 
         fig_size = (width_factor*cfg.FIG_SIZE[0], height_factor*cfg.FIG_SIZE[1])
-        fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI)
+        fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI, layout='constrained')
         # y_max = max([1.0, data_df.value.max()])
 
         hue_flag = groupby
@@ -274,7 +281,7 @@ class SpectralLibraryAnalyser():
 
         ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)')
-        ax.set_ylim(0, data_df.value.max()*1.01)
+        ax.set_ylim(bottom=0.0)
 
         if stacked:
             ax.set_ylabel('Stacked Reflectance')
@@ -316,16 +323,18 @@ class SpectralLibraryAnalyser():
         #             # ncol=n_cols # remove number of columns from the legend
         #             )        
 
+        handles, labels = ax.get_legend_handles_labels()
+
         if stacked:
-            # despine the plot
+            # drop the y-axis labels
+            ax.set_yticklabels([])
             # annotate the spectra with the Data ID
             # get legend labels
-            handles, labels = ax.get_legend_handles_labels()
             for idx, annotation in annotations.iterrows():
                 if annotation['label'] in labels:
                     # if a group label make text bigger and same colour as lines
                     ax.text(
-                        cfg.SAMPLE_RES['wvl_max']+20, 
+                        cfg.SAMPLE_RES['wvl_min'], 
                         annotation['level'], 
                         annotation['label'].title(), 
                         # colour it the same as the line
@@ -342,10 +351,23 @@ class SpectralLibraryAnalyser():
             ax.legend().remove()
 
         else:
-            ax.legend(loc="center left", 
-                    fontsize=cfg.LEGEND_S, 
-                    bbox_to_anchor=(1.02, 0.5),
-                    # ncol=n_cols
+            # capitalise the labels
+            if groupby != 'Sample ID':
+                labels = [label.title() for label in labels]
+            if len(labels) <2:
+                ncols = 1
+            else:
+                ncols = len(labels)//2
+            ax.legend(
+                    handles,
+                    labels,
+                    loc="upper center", 
+                    fontsize=cfg.LEGEND_S,
+                    bbox_to_anchor=(0.5, -0.35),
+                    # mode='expand',
+                    ncol=ncols,
+                    frameon=True,
+                    fancybox=False
                     )
         
         # plot title
@@ -438,7 +460,16 @@ class SpectralLibraryAnalyser():
                 'Species', # hue/style by species
                 'Sample ID', # hue/style by Sample ID
                 'Data ID' # hue/style by Data ID
-                ]='category',   
+                ]='Category', 
+            label_by: Literal[
+                'Library', # label by library
+                'Category', # label by category
+                'Group', # label by group
+                'Subgroup', # label by subgroup
+                'Species', # label by species
+                'Sample ID', # label by Sample ID
+                'Data ID' # label by Data ID
+                ]='Species',  
             stacked: bool=False,
             ci: bool=False,
             with_noise: bool=False,
@@ -498,7 +529,7 @@ class SpectralLibraryAnalyser():
             scope_list = self.spectra_obj.main_df[scope_label].unique().tolist()
             for scope in scope_list:
                 subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df[scope_label]==scope]
-                refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
+                refl_df = subset_df.loc[:, self.spectra_obj.wvls[0]:]
                 # get the category and group labels
                 groupby_df = subset_df.loc[:, groupby]
 
@@ -533,7 +564,7 @@ class SpectralLibraryAnalyser():
             if scope_label is None:
                 raise ValueError(f"Scope {scope} not found in dataset. Note that search is case sensitive.")
             subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df[scope_label]==scope]
-            refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
+            refl_df = subset_df.loc[:, self.spectra_obj.wvls[0]:]
             # get the category and group labels
             groupby_df = subset_df.loc[:, groupby]
 
@@ -600,9 +631,7 @@ class SpectralLibraryAnalyser():
         # rewrite spectra_obj object with continuum removed spectra
         data = spectra.reset_index()
         self.spectra_obj_cr.set_refl_data(data)
-        plotter = SpectralLibraryAnalyser(self.spectra_obj_cr)
-        plotter.plot_profiles()
-        return self.spectra_obj_cr.main_df
+        return self.spectra_obj_cr
 
     def visualise_spectrogram(self, continuum_removed: bool=True):
         """Display the reflectance data in 2D density plots, with colour giving

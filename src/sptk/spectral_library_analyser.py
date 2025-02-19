@@ -79,7 +79,11 @@ class SpectralLibraryAnalyser():
             self.band_info = pd.DataFrame()
 
     @staticmethod
-    def stack_spectra(data_df: pd.DataFrame, wvls: List, offset: pd.Series=None) -> pd.DataFrame:
+    def stack_spectra(
+            data_df: pd.DataFrame, 
+            wvls: List, 
+            offset: pd.Series=None, 
+            pad_factor: float=1/6) -> pd.DataFrame:
         """Stack the spectra of the dataframe for plotting.
 
         :param data_df: Reflectance data to be stacked
@@ -105,14 +109,14 @@ class SpectralLibraryAnalyser():
             max_range = (spec_range).max()
 
             # offset the reflectance
-            padding =  max_range/4
+            padding =  max_range * pad_factor
             spec_range[spec_range < padding] = padding
-            offset = - minima + (spec_range +padding/2).cumsum().shift(periods=1, fill_value = 0) + padding/2
+            offset = - minima + (spec_range+padding).cumsum().shift(periods=1, fill_value = 0) + padding/2
 
             # insert extra space where new group starts
             for i in range(1, len(data_df)):
                 if data_df[groupby][i] != data_df[groupby][i-1]:
-                    offset[i:] += 2*padding  
+                    offset[i:] += padding  
         else:
             max_range = 0 # hack              
     
@@ -122,6 +126,16 @@ class SpectralLibraryAnalyser():
         level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])).tolist()  
         # get the max reflectance value of each row
         groupby_level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].max())).tolist()
+        # get the min reflectance value of each row
+        groupby_min = (data_df[wvls].T.apply(lambda x: x[x.notnull()].min())).tolist()
+
+        # if the level is nearest max, va is upper, else lower
+        level2max = abs(np.array(level) - np.array(groupby_level))
+        level2min = abs(np.array(level) - np.array(groupby_min))
+        level2mid = abs(np.array(level) - (np.array(groupby_min) + np.array(groupby_level))/2)
+        # va = ['top' if level2max[i] < level2min[i] else 'bottom' for i in range(len(level))]
+        # set va to center is nearest mid, top if nearest max, bottom if nearest min
+        va = ['center' if level2mid[i] < level2max[i] and level2mid[i] < level2min[i] else 'top' if level2max[i] < level2min[i] else 'bottom' for i in range(len(level))]
 
         label = (data_df['Data ID']).tolist()
         # replace space with '\n' in the label
@@ -130,6 +144,7 @@ class SpectralLibraryAnalyser():
 
         new_level = level.copy()
         new_label = label.copy()
+        new_va = va.copy()
    
         # if max_range is not None:
         i = 1
@@ -140,6 +155,7 @@ class SpectralLibraryAnalyser():
                 # get font heigh in data units                
                 new_level.insert(i, groupby_level[c-1]) #level[c-1] + max_range/4)
                 new_label.insert(i, data_df[groupby][c-1])
+                new_va.insert(i, 'bottom')
                 # now the i counter is out of sync, so make it in sync
                 i += 1
             i += 1
@@ -147,8 +163,9 @@ class SpectralLibraryAnalyser():
         # fix missing groupby label at the end
         new_level.append(groupby_level[-1])
         new_label.append(data_df[groupby].iloc[-1])
+        new_va.append('bottom')
 
-        annotations = pd.DataFrame(data={'level':new_level, 'label':new_label})        
+        annotations = pd.DataFrame(data={'level':new_level, 'label':new_label, 'va':new_va})        
 
         return data_df, offset, annotations
 
@@ -168,6 +185,7 @@ class SpectralLibraryAnalyser():
                 'Data ID' # hue/style by Data ID
                 ]='Category',    
             stacked: bool=False,
+            pad_factor: float=1/6,
             ci: bool=False,
             with_noise: bool=False,
             hires_under: bool=False,
@@ -192,6 +210,7 @@ class SpectralLibraryAnalyser():
         :type hires_under: bool, optional
         """
 
+        # set title
         if scope == 'all':
             # title is the project name
             title = 'All Entries by ' + groupby
@@ -212,16 +231,12 @@ class SpectralLibraryAnalyser():
             title = self.spectra_obj.instrument.name.title() + ' Sampled ' + title
             filename = self.spectra_obj.instrument.name + '_sampled_' + filename
 
+        # prepare data frame for plotting
         data_ids = data_df.index
         data_df = data_df.reset_index()
 
-        # need to worry about noise at some point, but not right now.
-
-        # if len(data_df['Data ID'].unique()) == 1: # don't stack if only one entry
-        #     stacked = False
-
         if stacked:
-            data_df, offset, annotations = SpectralLibraryAnalyser.stack_spectra(data_df, self.wvls)
+            data_df, offset, annotations = SpectralLibraryAnalyser.stack_spectra(data_df, self.wvls, pad_factor=pad_factor)
             
         # long form version of plotting, to aggregate data
         data_df =pd.melt(data_df, id_vars=['Data ID',groupby]) # do we need group, subgroup, species?
@@ -238,6 +253,15 @@ class SpectralLibraryAnalyser():
             # stretch the vertical axis of the plot
             height_factor = max(np.floor(data_df['value'].max()/5), height_factor)
             width_factor = width_factor # * 1.2
+        else:
+            # extend the bottom of the plot to accomodate the legend
+            # get number of entries in the legend, determined by groupby
+            labels = data_df[groupby].unique().tolist()
+            label_len_chars = np.array([len(label) for label in labels]).cumsum()
+            label_len_inches = (4 + label_len_chars)*cfg.LEGEND_S/72/2 # assume char width is 0.5 char height, and handle line length is 4 chars
+            n_rows = 1 + (label_len_inches[-1]) // (cfg.FIG_SIZE[0]/2)
+            n_cols = len(labels) // n_rows
+            height_factor = height_factor + n_rows*0.1 # give 0.1 inch per row of legend, + offset
 
         fig_size = (width_factor*cfg.FIG_SIZE[0], height_factor*cfg.FIG_SIZE[1])
         fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI, layout='constrained')
@@ -279,17 +303,20 @@ class SpectralLibraryAnalyser():
                 lw=0.5, markers=marker_flag,
                 ax=ax)
 
+        # format axes
         ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)')
-        ax.set_ylim(bottom=0.0)
-
+        ax.set_ylim(bottom=0.0, top=data_df['value'].max()+0.2)
         if stacked:
             ax.set_ylabel('Stacked Reflectance')
         else:
             ax.set_ylabel('Reflectance')
-
         sns.despine(ax=ax, right=True, top=True)
-
+        # Set the font name for axis tick labels to be Arial
+        for tick in ax.get_xticklabels():
+            tick.set_fontname("Arial")
+        for tick in ax.get_yticklabels():
+            tick.set_fontname("Arial")
         # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
         # or minor at 100 and major at 500, depending on spectral range
         spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
@@ -309,22 +336,11 @@ class SpectralLibraryAnalyser():
             ax.grid(True, which='major',axis='both', lw=0.6)
             ax.grid(True, which='minor',axis='both', lw=0.3)
 
-        # Set the font name for axis tick labels to be Comic Sans
-        for tick in ax.get_xticklabels():
-            tick.set_fontname("Arial")
-        for tick in ax.get_yticklabels():
-            tick.set_fontname("Arial")
+        # add IR active band locations
+            
 
-        # TODO review legend - if stacked, might be better to annotate
-        # else:
-        #     ax.legend(loc="upper left", 
-        #             fontsize=cfg.LEGEND_S, 
-        #             bbox_to_anchor=(1.02, 1.0),
-        #             # ncol=n_cols # remove number of columns from the legend
-        #             )        
-
+        # format legend
         handles, labels = ax.get_legend_handles_labels()
-
         if stacked:
             # drop the y-axis labels
             ax.set_yticklabels([])
@@ -340,47 +356,35 @@ class SpectralLibraryAnalyser():
                         # colour it the same as the line
                         color=handles[labels.index(annotation['label'])].get_color(),
                         fontsize=cfg.LEGEND_S+1, 
-                        va='bottom')                 
+                        va=annotation['va'])                 
                 else:
                     ax.text(
                         cfg.SAMPLE_RES['wvl_max']+20, 
                         annotation['level'], 
                         annotation['label'], 
                         fontsize=cfg.LEGEND_S, 
-                        va='center') 
+                        va=annotation['va']) 
             ax.legend().remove()
-
         else:
             # capitalise the labels
             if groupby != 'Sample ID':
                 labels = [label.title() for label in labels]
-            if len(labels) <2:
-                ncols = 1
-            else:
-                ncols = len(labels)//2
             ax.legend(
                     handles,
                     labels,
                     loc="upper center", 
                     fontsize=cfg.LEGEND_S,
-                    bbox_to_anchor=(0.5, -0.35),
+                    bbox_to_anchor=(0.5, -0.25),
                     # mode='expand',
-                    ncol=ncols,
+                    ncol=n_cols,
                     frameon=True,
                     fancybox=False
                     )
         
-        # plot title
-        Scope = scope.capitalize()
-        Groupby = groupby.capitalize()
-        project_str = self.spectra_obj.project_name.replace('_', ' ')
-
         # Special treatment for Instrument Sampled spectra
         if self.obj_type == 'observation':
-      
             if ci:
                 title = title + ' Mean ± 1σ'
-
             # include the hi-res spectra that has been sampeld by the instrument
             if hires_under:
                 # find the scope label for the given scope string
@@ -389,15 +393,11 @@ class SpectralLibraryAnalyser():
                 refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
                 # get the category and group labels
                 groupby_df = subset_df.loc[:, groupby]
-
                 # incorporate error DF into this data for plotting
                 hires_df = pd.concat([refl_df, groupby_df], axis=1)
-
                 hires_df = hires_df.reset_index()
-
                 if stacked:
-                    hires_df, _, _ = SpectralLibraryAnalyser.stack_spectra(hires_df, matcol.wvls, offset=offset)
-
+                    hires_df, _, _ = SpectralLibraryAnalyser.stack_spectra(hires_df, matcol.wvls, offset=offset, pad_factor=pad_factor)
                 # long form version of plotting, to aggregate data
                 hires_df =pd.melt(hires_df, id_vars=['Data ID', groupby]) 
 
@@ -471,6 +471,7 @@ class SpectralLibraryAnalyser():
                 'Data ID' # label by Data ID
                 ]='Species',  
             stacked: bool=False,
+            pad_factor: float=1/6,
             ci: bool=False,
             with_noise: bool=False,
             hires_under: bool=False,
@@ -510,6 +511,7 @@ class SpectralLibraryAnalyser():
                         scope=scope,
                         groupby=groupby,
                         stacked=stacked,
+                        pad_factor=pad_factor,
                         with_noise=with_noise,
                         hires_under=hires_under,
                         ci=ci)
@@ -541,6 +543,7 @@ class SpectralLibraryAnalyser():
                             scope=scope,
                             groupby=groupby,
                             stacked=stacked,
+                            pad_factor=pad_factor,
                             with_noise=with_noise,
                             hires_under=hires_under,
                             ci=ci)
@@ -576,6 +579,7 @@ class SpectralLibraryAnalyser():
                         scope=scope,
                         groupby=groupby,
                         stacked=stacked,
+                        pad_factor=pad_factor,
                         with_noise=with_noise,
                         hires_under=hires_under,
                         ci=ci)

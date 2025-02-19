@@ -913,6 +913,7 @@ class Observation():
                     stacked: bool=False,
                     scope: str='all', 
                     groupby: str='Category',
+                    pad_factor: float=1/6,
                     ci: bool=False,
                     with_noise: bool=False,
                     hires_under: bool=False,
@@ -924,6 +925,7 @@ class Observation():
                         stacked=stacked,
                         scope=scope,
                         groupby=groupby,
+                        pad_factor=pad_factor,
                         ci=ci,
                         with_noise=with_noise,
                         hires_under=hires_under)

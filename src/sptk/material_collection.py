@@ -944,6 +944,7 @@ class MaterialCollection():
                     stacked: bool=False,
                     scope: str='all', 
                     groupby: str='Category',
+                    pad_factor: float=1/6, # adjust the padding factor for the plot
                     ci: bool=False
                     ) -> plt.Axes:
         """Plot the profiles of the materials
@@ -953,6 +954,7 @@ class MaterialCollection():
                         stacked=stacked,
                         scope=scope,
                         groupby=groupby,
+                        pad_factor=pad_factor,
                         ci=ci
                         )
         return axes

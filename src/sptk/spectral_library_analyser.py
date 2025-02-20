@@ -171,6 +171,7 @@ class SpectralLibraryAnalyser():
 
     def render_profile_plot(self,
             data_df: pd.DataFrame,
+            ax: plt.Axes,
             scope: Literal[
                 'all', # all data
                 str # specific category, group, subgroup, species, or sample
@@ -210,7 +211,7 @@ class SpectralLibraryAnalyser():
         :type hires_under: bool, optional
         """
 
-        # set title
+        # set axes title
         if scope == 'all':
             # title is the project name
             title = 'All Entries by ' + groupby
@@ -241,30 +242,6 @@ class SpectralLibraryAnalyser():
         # long form version of plotting, to aggregate data
         data_df =pd.melt(data_df, id_vars=['Data ID',groupby]) # do we need group, subgroup, species?
 
-        # set up the plot
-        sns.set_context("paper")
-        # use futura font
-        plt.rcParams['font.family'] = 'sans-serif'
-        plt.rcParams['font.sans-serif'] = 'Futura'
-
-        width_factor = 1 # + 0.3
-        height_factor = 1 #1.1 # allow for legend at bottom
-        if stacked:
-            # stretch the vertical axis of the plot
-            height_factor = max(np.floor(data_df['value'].max()/5), height_factor)
-            width_factor = width_factor # * 1.2
-        else:
-            # extend the bottom of the plot to accomodate the legend
-            # get number of entries in the legend, determined by groupby
-            labels = data_df[groupby].unique().tolist()
-            label_len_chars = np.array([len(label) for label in labels]).cumsum()
-            label_len_inches = (4 + label_len_chars)*cfg.LEGEND_S/72/2 # assume char width is 0.5 char height, and handle line length is 4 chars
-            n_rows = 1 + (label_len_inches[-1]) // (cfg.FIG_SIZE[0]/2)
-            n_cols = len(labels) // n_rows
-            height_factor = height_factor + n_rows*0.1 # give 0.1 inch per row of legend, + offset
-
-        fig_size = (width_factor*cfg.FIG_SIZE[0], height_factor*cfg.FIG_SIZE[1])
-        fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI, layout='constrained')
         # y_max = max([1.0, data_df.value.max()])
 
         hue_flag = groupby
@@ -305,18 +282,21 @@ class SpectralLibraryAnalyser():
 
         # format axes
         ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
-        ax.set_xlabel('Wavelength (nm)')
+        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         ax.set_ylim(bottom=0.0, top=data_df['value'].max()+0.2)
         if stacked:
-            ax.set_ylabel('Stacked Reflectance')
+            ax.set_ylabel('Stacked Reflectance', fontsize=cfg.LABEL_S)
+            ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
         else:
-            ax.set_ylabel('Reflectance')
+            ax.set_ylabel('Reflectance', fontsize=cfg.LABEL_S)
         sns.despine(ax=ax, right=True, top=True)
         # Set the font name for axis tick labels to be Arial
         for tick in ax.get_xticklabels():
             tick.set_fontname("Arial")
+            tick.set_fontsize(cfg.LABEL_S)
         for tick in ax.get_yticklabels():
             tick.set_fontname("Arial")
+            tick.set_fontsize(cfg.LABEL_S)
         # add minor grid lines at 50 nm intervals and major gridlines at 100 nm
         # or minor at 100 and major at 500, depending on spectral range
         spec_range = cfg.SAMPLE_RES['wvl_max'] - cfg.SAMPLE_RES['wvl_min']
@@ -343,7 +323,7 @@ class SpectralLibraryAnalyser():
         handles, labels = ax.get_legend_handles_labels()
         if stacked:
             # drop the y-axis labels
-            ax.set_yticklabels([])
+            # ax.set_yticklabels([])
             # annotate the spectra with the Data ID
             # get legend labels
             for idx, annotation in annotations.iterrows():
@@ -366,6 +346,15 @@ class SpectralLibraryAnalyser():
                         va=annotation['va']) 
             ax.legend().remove()
         else:
+            labels = data_df[groupby].unique().tolist()
+            # get estimate of cumulative length in inches of horizontal 
+            # legend, if as a single row
+            label_len_chars = np.array([len(label) for label in labels]).cumsum()
+            # assume char width is 0.5 char height, handle line is 4 chars
+            label_len_inches = (4 + label_len_chars)*cfg.LEGEND_S/72/2
+            # all for estimate of row length to be 1/2 figure width
+            n_rows = 1 + (label_len_inches[-1]) // (cfg.FIG_SIZE[0]/2)
+            n_cols = len(labels) // n_rows
             # capitalise the labels
             if groupby != 'Sample ID':
                 labels = [label.title() for label in labels]
@@ -417,7 +406,97 @@ class SpectralLibraryAnalyser():
 
         plt.title(title, fontsize=cfg.LABEL_S) # update - removing titles from plots
 
-        fig.tight_layout()
+        return ax
+
+    def setup_plot(self, 
+                   dataframe: pd.DataFrame,
+                   groupby: str, 
+                   stacked: bool=False,
+                   subfig: plt.figure=None) -> Tuple[plt.figure, plt.Axes]:
+        """Setup a profile plot figure and axes.
+
+        :param dataframe: the data that will be plotted
+        :type dataframe: pd.DataFrame
+        :param groupby: _description_
+        :type groupby: str
+        :param stacked: _description_, defaults to False
+        :type stacked: bool, optional
+        :return: _description_
+        :rtype: Tuple[plt.figure, plt.Axes]
+        """  
+
+        # problem - this aspect ratio is for an axes object, 
+        # including the legend, or for a stacked figure.
+        width_factor = 1 # + 0.3
+        height_factor = 1 #1.1 # allow for legend at bottom
+        if stacked:
+            # stretch the vertical axis of the plot
+            # assume that ~6 entries will fit per height_factor of 1                
+            height_factor = max(len(dataframe) / 6, height_factor)
+            width_factor = width_factor # * 1.2
+        else:
+            # extend the bottom of the figure to accomodate the legend
+            # get number of entries in the legend, determined by groupby
+            labels = dataframe[groupby].unique().tolist()
+            # get estimate of cumulative length in inches of horizontal 
+            # legend, if as a single row
+            label_len_chars = np.array([len(label) for label in labels]).cumsum()
+            # assume char width is 0.5 char height, handle line is 4 chars
+            label_len_inches = (4 + label_len_chars)*cfg.LEGEND_S/72/2
+            # all for estimate of row length to be 1/2 figure width
+            n_rows = 1 + (label_len_inches[-1]) // (cfg.FIG_SIZE[0]/2)
+            n_cols = len(labels) // n_rows
+            # give 0.1 inch per row of legend, + offset
+            height_factor = height_factor + n_rows*0.1 
+
+        # limit the height to 3
+        height_factor = min(height_factor, 3)
+
+        fig_size = (width_factor*cfg.FIG_SIZE[0], height_factor*cfg.FIG_SIZE[1])
+        if subfig is not None:
+            # set the subfigure size
+            ax = subfig.add_subplot()
+            fig = subfig
+        else:
+            fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI, layout='constrained')
+
+        # set up the plot
+        sns.set_context("paper")
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
+
+        return fig, ax
+
+    def export_plot(self, 
+                fig, 
+                axes, 
+                scope,
+                groupby: str, 
+                stacked: bool=False, 
+                with_noise: bool=False, 
+                out_dir: Union[bool, str]=False) -> Tuple[plt.figure, plt.Axes]:
+        """Export the profile plot figure to PDF and SVG formats.
+
+        :param fig: the figure to be exported
+        :type fig: plt.figure
+        :param axes: the axes to be exported
+        :type axes: plt.Axes
+        :param groupby: _description_
+        :type groupby: str
+        :param stacked: _description_, defaults to False
+        :type stacked: bool, optional
+        :param with_noise: _description_, defaults to False
+        :type with_noise: bool, optional
+        :param out_dir: _description_, defaults to False
+        :type out_dir: Union[bool, str], optional
+        :return: _description_
+        :rtype: Tuple[plt.figure, plt.Axes]
+        """
+
+        # do formatting of figure here
+
+        # fig.tight_layout()
 
         # save figure
         if out_dir:
@@ -425,11 +504,26 @@ class SpectralLibraryAnalyser():
         else:
             out_dir = Path(self.spectra_obj.object_dir / 'plots')
             out_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        # set figure filename and title
+        if scope == 'all':
+            filename = f'all_entries_by_{groupby.lower()}_profile_plot'
+        else:
+            title = scope.title() + ' by ' + groupby.title()
+            filename = f'{scope}_by_{groupby.lower()}'
+
+        if stacked:
+            filename = filename + '_stacked'
+        if with_noise: # worry about this for observations
+            filename = filename + '_with_noise'
+
         if self.obj_type == 'observation':
-            inst = self.spectra_obj.instrument.name
-            filename = f'{inst}_{filename}'
-        
+            title = self.spectra_obj.instrument.name.title() + ' Sampled ' + title
+            filename = self.spectra_obj.instrument.name + '_sampled_' + filename
+
+        if scope != 'all':
+            fig.suptitle(title, fontsize=cfg.LABEL_S)
+                
         # pdf output
         output_file = Path(out_dir, filename).with_suffix('.pdf')
         fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='pdf')
@@ -437,9 +531,9 @@ class SpectralLibraryAnalyser():
         # svg output
         plt.rcParams['svg.fonttype'] = 'none'
         output_file = Path(out_dir, filename).with_suffix('.svg')
-        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='svg')
-
-        return ax
+        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='svg')        
+    
+        return fig, axes
 
     def plot_profiles(self,
             scope: Literal[
@@ -476,7 +570,7 @@ class SpectralLibraryAnalyser():
             with_noise: bool=False,
             hires_under: bool=False,
             out_dir: Union[bool, str]=False
-            ) -> plt.Axes:
+            ) -> Tuple[plt.figure, plt.Axes]:
         """Plot the profiles of the materials of the spectral library
         """
         if cfg.TIME_IT:
@@ -506,8 +600,12 @@ class SpectralLibraryAnalyser():
             # incorporate error DF into this data for plotting
             all_df = pd.concat([refl_df, groupby_df], axis=1)
             
+            # update to write figure here
+            fig, ax = self.setup_plot(all_df, groupby, stacked)
+
             ax = self.render_profile_plot(
                         all_df,
+                        ax,
                         scope=scope,
                         groupby=groupby,
                         stacked=stacked,
@@ -515,32 +613,76 @@ class SpectralLibraryAnalyser():
                         with_noise=with_noise,
                         hires_under=hires_under,
                         ci=ci)
-            axes.append(ax)
+            ax = [ax]
+            
+            fig, ax = self.export_plot(fig, ax, scope, groupby, stacked, with_noise, out_dir)
 
             if cfg.TIME_IT:
                 toc = time.perf_counter()
                 print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
 
-            return ax
+            return fig, ax
         
         elif scope in scope_dict.keys():
-            # Plot each 'scope' collection in a separate figure
+            # Plot each 'scope' collection in a separate plot
             
             # get the list of unique values for the scope
             scope_label = scope_dict[scope]
-            scope_list = self.spectra_obj.main_df[scope_label].unique().tolist()
-            for scope in scope_list:
-                subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df[scope_label]==scope]
+            scope_list = self.spectra_obj.main_df[scope_label].unique().tolist() 
+
+            # compute grid layout of subfigures
+            n_subfigs = len(scope_list)
+            max_fig_cols = 2
+            max_fig_rows = 3
+            n_cols = min(n_subfigs, max_fig_cols)
+            tot_n_rows = int(np.ceil(n_subfigs/max_fig_cols))
+            # compute number of figure pages needed
+            n_figs = (tot_n_rows-1)//max_fig_rows + 1
+            figs = []
+            subfigs = []
+            fig_rows = []
+            for f in range(n_figs):
+                if f < n_figs-1:
+                    n_rows = max_fig_rows
+                else:
+                    n_rows = tot_n_rows - max_fig_rows*(n_figs-1)
+                fig = plt.figure(layout='constrained', figsize=(n_cols*cfg.FIG_SIZE[0], n_rows*cfg.FIG_SIZE[1]), dpi=cfg.DPI)           
+                subfig = fig.subfigures(n_rows, n_cols)
+                figs.append(fig)
+                subfigs.append(subfig)
+                fig_rows.append(n_rows)
+
+            for s, this_scope in enumerate(scope_list):
+                subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df[scope_label]==this_scope]
                 refl_df = subset_df.loc[:, self.spectra_obj.wvls[0]:]
                 # get the category and group labels
                 groupby_df = subset_df.loc[:, groupby]
 
                 # incorporate error DF into this data for plotting
-                all_df = pd.concat([refl_df, groupby_df], axis=1)
+                scope_df = pd.concat([refl_df, groupby_df], axis=1)
+                
+                sf = s // (max_fig_cols*max_fig_rows)
+
+                # activate figure
+                plt.figure(figs[sf].number)
+
+                # update to write figure here
+                row_n = s%fig_rows[sf]
+                if sf == 0:
+                    col_n = s//fig_rows[sf]
+                else:
+                    col_n = s//fig_rows[sf] - (sf * fig_rows[sf-1])
+                
+                scope_fig, ax = self.setup_plot(
+                    scope_df, 
+                    groupby, 
+                    stacked, 
+                    subfig=subfigs[sf][row_n][col_n])
                 
                 ax = self.render_profile_plot(
-                            all_df,
-                            scope=scope,
+                            scope_df,
+                            ax,
+                            scope=this_scope,
                             groupby=groupby,
                             stacked=stacked,
                             pad_factor=pad_factor,
@@ -549,9 +691,17 @@ class SpectralLibraryAnalyser():
                             ci=ci)
                 axes.append(ax)
 
-                if cfg.TIME_IT:
-                    toc = time.perf_counter()
-                    print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
+                subfigs[sf][row_n][col_n] = scope_fig
+
+            for f, fig in enumerate(figs):
+                fig, axes = self.export_plot(fig, axes, scope, groupby, stacked, with_noise, out_dir)
+            
+            # show the subfigure
+            plt.show()
+
+            if cfg.TIME_IT:
+                toc = time.perf_counter()
+                print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
 
             return axes
         
@@ -590,12 +740,6 @@ class SpectralLibraryAnalyser():
                 print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
             
             return axes
-
-        if cfg.TIME_IT:
-            toc = time.perf_counter()
-            print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
-
-        return axes
 
     # """
     # Spectrogram Visualisation & Continuum Removal

@@ -348,7 +348,7 @@ class Instrument():
         filter_id = filter_series[cwl].to_list()
         return filter_id
 
-    def plot_filter_profiles(self):
+    def plot_filter_profiles(self, subfig: plt.figure=None):
         """Plot all filter profiles
         """
         print('Plotting Instrument Transmission...')
@@ -359,10 +359,14 @@ class Instrument():
         else:
             trans_df = pd.melt(self.main_df.reset_index(),
                                 id_vars=['cwl', 'fwhm', 'filter_id'])
-        fltr_ax_size = (1.3*cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
-        
-        fig, fltr_ax = plt.subplots(figsize=fltr_ax_size, dpi=cfg.DPI)
-        
+            
+        if subfig is not None:
+            fltr_ax = subfig.add_subplot()
+            fig = subfig
+        else:
+            fltr_ax_size = (cfg.FIG_SIZE[0], 1.1*cfg.FIG_SIZE[1])
+            fig, fltr_ax = plt.subplots(figsize=fltr_ax_size, dpi=cfg.DPI)
+
         # set up the plot
         sns.set_context("paper")
         # use futura font
@@ -400,8 +404,8 @@ class Instrument():
                 rgb /= np.max(rgb)
 
             # just do central wavelength to XYZ
-            xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
-            colour.plotting.plot_single_sd(sds[:,0])
+            # xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
+            # colour.plotting.plot_single_sd(sds[:,0])
 
             cwl_colours = sns.color_palette(rgb)
         else:
@@ -417,7 +421,7 @@ class Instrument():
                 y='value',
                 ax=fltr_ax,
                 hue='filter_id',
-                alpha=0.5,
+                alpha=0.3,
                 palette="husl",
                 linewidth=0.6,
                 legend=False)
@@ -466,25 +470,30 @@ class Instrument():
         # Set the font name for axis tick labels to be Comic Sans
         for tick in fltr_ax.get_xticklabels():
             tick.set_fontname("Arial")
+            tick.set_fontsize(cfg.LABEL_S)
         for tick in fltr_ax.get_yticklabels():
             tick.set_fontname("Arial")
+            tick.set_fontsize(cfg.LABEL_S)
 
         label_params = fltr_ax.get_legend_handles_labels()
 
-        labels = ["%s\n%.0f±%.1f nm" % (filter_id, cwl, fwhm) for filter_id, cwl, fwhm in zip(filter_ids, cwls, fwhms)]
+        labels = ["%s\n%.0f nm\n±%.1f nm" % (filter_id, cwl, fwhm) for filter_id, cwl, fwhm in zip(filter_ids, cwls, fwhms)]
 
-        if self.filter_ids[0][0] == 'S':
-            # insert '...' between labels
-            labels.insert(1, '...')
-            labels.insert(3, '...')
-            blank = mpl.patches.Rectangle((0,0), 1, 1, fill=False, edgecolor='none',visible=False)
-            label_params[0].insert(1, blank)
-            label_params[0].insert(3, blank)
+        # if self.filter_ids[0][0] == 'S':
+        #     # insert '...' between labels
+        #     labels.insert(1, '...')
+        #     labels.insert(3, '...')
+        #     blank = mpl.patches.Rectangle((0,0), 1, 1, fill=False, edgecolor='none',visible=False)
+        #     label_params[0].insert(1, blank)
+        #     label_params[0].insert(3, blank)
 
         n_ids = len(labels)
         new_label_params = (label_params[0], labels)
+
+        # put the legend below the plot, and make horizontal
         fltr_ax.legend(*new_label_params,
-                loc='center left', bbox_to_anchor=(1, 0.5),
+                loc='upper center', bbox_to_anchor=(0.5, -0.25),
+                ncols=n_ids, frameon=False,
                 fontsize=cfg.LEGEND_S)
                
         if self.filter_ids[0][0] == 'S':
@@ -503,30 +512,34 @@ class Instrument():
                 fontsize=cfg.LEGEND_S,
                 rotation=60)
             
-        plt.tight_layout()
-        output_file = Path(self.object_dir, self.name).with_suffix(cfg.PLT_FRMT)
-        fig.savefig(output_file)
-
-        print('Plots exported to '+str(Path(self.object_dir)))
+        if subfig is None:
+            plt.tight_layout()
+            output_file = Path(self.object_dir, self.name).with_suffix(cfg.PLT_FRMT)
+            fig.savefig(output_file)
+            print('Plots exported to '+str(Path(self.object_dir)))
 
         return fig, fltr_ax
 
-    def plot_spectral_resolution(self):
+    def plot_spectral_resolution(self, subfig: plt.figure=None):
         """Plot the spectral power resolution of the instrument as a function 
         of cwl
         """   
 
         print('Plotting Spectral Resolution...')
+
+        if subfig is not None:
+            res_ax = subfig.add_subplot()
+            fig = subfig
+        else:
+            fig, res_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        
         # set up the plot
         sns.set_context("paper")
         # use futura font
         plt.rcParams['font.family'] = 'sans-serif'
         plt.rcParams['font.sans-serif'] = 'Futura'
         sns.despine(right=True, top=True)
-        # plt.rcParams.update({'font.size': 8})
-        
-        fig, res_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
-        
+        # plt.rcParams.update({'font.size': 8})                
         
         spectral_resolution = self.cwls() / self.fwhms() 
 
@@ -567,17 +580,15 @@ class Instrument():
         for tick in res_ax.get_yticklabels():
             tick.set_fontname("Arial")
 
-        plt.tight_layout()
-
-        output_file = Path(self.object_dir, self.name+'_spectral_resolution').with_suffix(cfg.PLT_FRMT)
-
-        fig.savefig(output_file)
-
-        print('Plots exported to '+str(Path(self.object_dir)))
+        if subfig is None:        
+            plt.tight_layout()
+            output_file = Path(self.object_dir, self.name+'_spectral_resolution').with_suffix(cfg.PLT_FRMT)
+            fig.savefig(output_file)
+            print('Plots exported to '+str(Path(self.object_dir)))
 
         return fig, res_ax
 
-    def plot_fwhm(self):
+    def plot_fwhm(self, subfig: plt.figure=None):
         """Plot the full-width at half-maximum of the instrument as a function
         of cwl
         """
@@ -589,7 +600,11 @@ class Instrument():
         plt.rcParams['font.sans-serif'] = 'Futura'
         sns.despine(right=True, top=True)
 
-        fig, fwhm_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
+        if subfig is not None:
+            fwhm_ax = subfig.add_subplot()
+            fig = subfig
+        else:
+            fig, fwhm_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
 
         fwhms = self.fwhms()
 
@@ -630,22 +645,27 @@ class Instrument():
         for tick in fwhm_ax.get_yticklabels():
             tick.set_fontname("Arial")
 
-        plt.tight_layout()
-
-        output_file = Path(self.object_dir, self.name+'_fwhms').with_suffix(cfg.PLT_FRMT)
-
-        fig.savefig(output_file)
-
-        print('Plots exported to '+str(Path(self.object_dir)))
+        if subfig is None:
+            plt.tight_layout()
+            output_file = Path(self.object_dir, self.name+'_fwhms').with_suffix(cfg.PLT_FRMT)
+            fig.savefig(output_file)
+            print('Plots exported to '+str(Path(self.object_dir)))
 
         return fig, fwhm_ax
     
-    def plot_snr(self):
+    def plot_snr(self, subfig: plt.figure=None):
         """Plot the signal-to-noise ratio of the instrument as a function
         of cwl
         """   
 
         print('Plotting Signal-to-Noise Ratio...')
+
+        if subfig is not None:
+            snr_ax = subfig.add_subplot()
+            fig = subfig
+        else:
+            fltr_ax_size = (cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+            fig, snr_ax = plt.subplots(figsize=fltr_ax_size, dpi=cfg.DPI)
 
         # set up the plot
         # use futura font
@@ -653,7 +673,6 @@ class Instrument():
         plt.rcParams['font.sans-serif'] = 'Futura'
         sns.despine(right=True, top=True)
 
-        fig, snr_ax = plt.subplots(figsize=cfg.FIG_SIZE, dpi=cfg.DPI)
 
         snrs = self.main_df['snr']
 
@@ -695,15 +714,54 @@ class Instrument():
         for tick in snr_ax.get_yticklabels():
             tick.set_fontname("Arial")
 
-        plt.tight_layout()
+        if subfig is None:
+            plt.tight_layout()
+            output_file = Path(self.object_dir, self.name+'_snr').with_suffix(cfg.PLT_FRMT)
+            fig.savefig(output_file)
+            print('Plots exported to '+str(Path(self.object_dir)))
 
-        output_file = Path(self.object_dir, self.name+'_snr').with_suffix(cfg.PLT_FRMT)
+        return fig, snr_ax     
 
-        fig.savefig(output_file)
+    def plot_instrument_characteristics(self):
+        """Plot the instrument characteristics of the instrument as a function
+        of cwl
+        """
+        # make a figure to hold the information. 2 x 2 grid
+        fig = plt.figure(layout='constrained', figsize=(2*cfg.FIG_SIZE[0], 2*cfg.FIG_SIZE[1]), dpi=cfg.DPI)           
+        subfig = fig.subfigures(2, 2)
+
+        # aff filter profile plot
+        subfig[0][0], filter_ax = self.plot_filter_profiles(subfig[0][0])
+        # add 'A.' to the title
+        filter_ax.set_title('A. Transmission Profiles', fontsize=cfg.TITLE_S)
+        # add signal-to-noise ratio plot
+        subfig[0][1], snr_ax = self.plot_snr(subfig[0][1])
+        # add 'B.' to the title
+        snr_ax.set_title('B. Signal-to-Noise Ratio', fontsize=cfg.TITLE_S)
+        # add spectral resolution plot        
+        subfig[1][0], res_ax = self.plot_spectral_resolution(subfig[1][0])
+        # add 'C.' to the title
+        res_ax.set_title('C. Spectral Resolution', fontsize=cfg.TITLE_S)
+        # add fwhm plot
+        subfig[1][1], fwhm_ax = self.plot_fwhm(subfig[1][1])
+        # add 'D.' to the title
+        fwhm_ax.set_title('D. FWHM', fontsize=cfg.TITLE_S)
+
+        axes = [filter_ax, snr_ax, res_ax, fwhm_ax]
+
+        # activate the figure
+        plt.figure(fig.number)
+        
+        # set plot title
+        fig.suptitle(f'{self.name.title()} Characteristics', fontsize=cfg.TITLE_S)
+
+        output_file = Path(self.object_dir, self.name+'_instrument_characteristics').with_suffix(cfg.PLT_FRMT)
+        plt.savefig(output_file)
 
         print('Plots exported to '+str(Path(self.object_dir)))
 
-        return fig, snr_ax     
+        return fig, axes
+
 
     def export_main_df(self):
         """Export the Instrument Transmission to CSV and Pickle."""

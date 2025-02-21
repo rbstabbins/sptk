@@ -82,6 +82,7 @@ class SpectralLibraryAnalyser():
     def stack_spectra(
             data_df: pd.DataFrame, 
             wvls: List, 
+            noisy: bool=False,
             offset: pd.Series=None, 
             pad_factor: float=1/6) -> pd.DataFrame:
         """Stack the spectra of the dataframe for plotting.
@@ -97,14 +98,22 @@ class SpectralLibraryAnalyser():
         # get groupby from data_df
         groupby = data_df.columns[-1]
         data_df = data_df.sort_values(by=[groupby, 'Data ID'], ascending=False)
-        
+
         # reset index
         data_df = data_df.reset_index(drop=True)
+
+        # if ci, then get mean values
+        if noisy:
+            base_df = data_df.groupby(['Root Data ID']).mean(numeric_only=True) # need the root id to work with, to get back to the average values..coudl get it by acting on the pre-noise data_df?
+            base_df = base_df.reset_index()
+        else:
+            base_df = data_df
+        
                 
         if offset is None:
             # get minima
-            minima = data_df[wvls].min(axis=1)
-            maxima = data_df[wvls].max(axis=1)
+            minima = base_df[wvls].min(axis=1)
+            maxima = base_df[wvls].max(axis=1)
             spec_range = maxima - minima
             max_range = (spec_range).max()
 
@@ -112,6 +121,12 @@ class SpectralLibraryAnalyser():
             padding =  max_range * pad_factor
             spec_range[spec_range < padding] = padding
             offset = - minima + (spec_range+padding).cumsum().shift(periods=1, fill_value = 0) + padding/2
+
+            # now have to expand the offset to the full length of the data_df
+            if noisy:
+                n_repeats = int(len(data_df) / len(base_df))
+                offset = offset.repeat(n_repeats)
+                offset.reset_index(drop=True, inplace=True)
 
             # insert extra space where new group starts
             for i in range(1, len(data_df)):
@@ -124,7 +139,13 @@ class SpectralLibraryAnalyser():
 
         # get the last finite reflectance value of each row
         level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])).tolist()  
-        # get the max reflectance value of each row
+                    # now have to expand the offset to the full length of the data_df
+        if noisy:
+            n_repeats = int(len(data_df) / len(base_df))
+            level = (data_df.groupby(['Root Data ID']).mean(numeric_only=True).T.apply(lambda x: x[x.notnull()].values[-1]))
+            level.sort_values(inplace=True)
+            level = level.repeat(n_repeats).to_list()
+        # get the max reflectance value of each row - this is ok to account for noise
         groupby_level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].max())).tolist()
         # get the min reflectance value of each row
         groupby_min = (data_df[wvls].T.apply(lambda x: x[x.notnull()].min())).tolist()
@@ -137,7 +158,10 @@ class SpectralLibraryAnalyser():
         # set va to center is nearest mid, top if nearest max, bottom if nearest min
         va = ['center' if level2mid[i] < level2max[i] and level2mid[i] < level2min[i] else 'top' if level2max[i] < level2min[i] else 'bottom' for i in range(len(level))]
 
-        label = (data_df['Data ID']).tolist()
+        if noisy:
+            label = (data_df['Root Data ID']).tolist() # somewhere this list is getting inverted....
+        else:
+            label = (data_df['Data ID']).tolist()
         # replace space with '\n' in the label
         label = [l.replace(' ', '\n') for l in label]
         maxima = data_df[wvls].max(axis=1)
@@ -149,7 +173,7 @@ class SpectralLibraryAnalyser():
         # if max_range is not None:
         i = 1
         c = 1
-        while c < len(data_df):
+        while c < len(data_df): # this part is not accounting for noise
             if data_df[groupby][c] != data_df[groupby][c-1]:
                 # insert the groupby label at the start of the new group
                 # get font heigh in data units                
@@ -188,7 +212,7 @@ class SpectralLibraryAnalyser():
             stacked: bool=False,
             pad_factor: float=1/6,
             ci: bool=False,
-            with_noise: bool=False,
+            with_noise: bool=False, # think this can be deprecated
             hires_under: bool=False,
             out_dir: Union[bool, str]=False) -> None:
         """Method for producing the plot itself, according to given DataFrame,
@@ -224,6 +248,12 @@ class SpectralLibraryAnalyser():
             title = title
             filename = filename + '_stacked'
 
+        if self.obj_type == 'observation':
+            if self.spectra_obj.noisy:
+                with_noise = True
+        else:
+            with_noise = False
+
         if with_noise: # worry about this for observations
             title = title + ' with Noise'
             filename = filename + '_with_noise'
@@ -237,10 +267,13 @@ class SpectralLibraryAnalyser():
         data_df = data_df.reset_index()
 
         if stacked:
-            data_df, offset, annotations = SpectralLibraryAnalyser.stack_spectra(data_df, self.wvls, pad_factor=pad_factor)
+            data_df, offset, annotations = SpectralLibraryAnalyser.stack_spectra(data_df, self.spectra_obj.wvls, noisy=with_noise, pad_factor=pad_factor)
             
         # long form version of plotting, to aggregate data
-        data_df =pd.melt(data_df, id_vars=['Data ID',groupby]) # do we need group, subgroup, species?
+        if with_noise:
+            data_df =pd.melt(data_df, id_vars=['Data ID', groupby, 'Root Data ID'])
+        else:
+            data_df =pd.melt(data_df, id_vars=['Data ID',groupby]) # do we need group, subgroup, species?
 
         # y_max = max([1.0, data_df.value.max()])
 
@@ -281,10 +314,12 @@ class SpectralLibraryAnalyser():
                 ax=ax)
 
         # format axes
-        ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
+        # set axes limits according to spectarl object spectral range
+        ax.set_xlim(self.spectra_obj.wvls[0]-10, self.spectra_obj.wvls[-1]+10)
+        # ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
-        ax.set_ylim(bottom=0.0, top=data_df['value'].max()+0.2)
         if stacked:
+            ax.set_ylim(bottom=0.0, top=data_df['value'].max()*1.01) # need a way to add the height of the annotations - 0.2 isn't a good hack. could just let annotations sit outside plot.            
             ax.set_ylabel('Stacked Reflectance', fontsize=cfg.LABEL_S)
             ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
         else:
@@ -330,7 +365,7 @@ class SpectralLibraryAnalyser():
                 if annotation['label'] in labels:
                     # if a group label make text bigger and same colour as lines
                     ax.text(
-                        cfg.SAMPLE_RES['wvl_min'], 
+                        self.spectra_obj.wvls[0], 
                         annotation['level'], 
                         annotation['label'].title(), 
                         # colour it the same as the line
@@ -339,7 +374,7 @@ class SpectralLibraryAnalyser():
                         va=annotation['va'])                 
                 else:
                     ax.text(
-                        cfg.SAMPLE_RES['wvl_max']+20, 
+                        self.spectra_obj.wvls[-1]+20, 
                         annotation['level'], 
                         annotation['label'], 
                         fontsize=cfg.LEGEND_S, 
@@ -378,7 +413,12 @@ class SpectralLibraryAnalyser():
             if hires_under:
                 # find the scope label for the given scope string
                 matcol = self.spectra_obj.material_collection
-                subset_df = matcol.main_df.loc[data_ids]
+                # if the observation is noisy, then we need to get the non-noisy list of data ids
+                if self.spectra_obj.noisy:
+                    orig_ids = self.spectra_obj.main_df['Root Data ID'][data_ids].unique()
+                    subset_df = matcol.main_df.loc[orig_ids]
+                else:
+                    subset_df = matcol.main_df.loc[data_ids]
                 refl_df = subset_df.loc[:, cfg.SAMPLE_RES['wvl_min']:]
                 # get the category and group labels
                 groupby_df = subset_df.loc[:, groupby]
@@ -386,7 +426,10 @@ class SpectralLibraryAnalyser():
                 hires_df = pd.concat([refl_df, groupby_df], axis=1)
                 hires_df = hires_df.reset_index()
                 if stacked:
-                    hires_df, _, _ = SpectralLibraryAnalyser.stack_spectra(hires_df, matcol.wvls, offset=offset, pad_factor=pad_factor)
+                    if self.spectra_obj.noisy:
+                        # reduce offset back to original data list
+                        offset = pd.Series(offset.unique())
+                    hires_df, _, _ = SpectralLibraryAnalyser.stack_spectra(hires_df, matcol.wvls, False, offset=offset, pad_factor=pad_factor)
                 # long form version of plotting, to aggregate data
                 hires_df =pd.melt(hires_df, id_vars=['Data ID', groupby]) 
 
@@ -431,8 +474,11 @@ class SpectralLibraryAnalyser():
         height_factor = 1 #1.1 # allow for legend at bottom
         if stacked:
             # stretch the vertical axis of the plot
-            # assume that ~6 entries will fit per height_factor of 1                
-            height_factor = max(len(dataframe) / 6, height_factor)
+            # assume that ~6 entries will fit per height_factor of 1 
+            if 'Root Data ID' in dataframe.columns:
+               height_factor = max(len(dataframe['Root Data ID'].unique()) / 6, height_factor)               
+            else:
+                height_factor = max(len(dataframe) / 6, height_factor)
             width_factor = width_factor # * 1.2
         else:
             # extend the bottom of the figure to accomodate the legend
@@ -475,6 +521,7 @@ class SpectralLibraryAnalyser():
                 groupby: str, 
                 stacked: bool=False, 
                 with_noise: bool=False, 
+                index: str=None, # for saving multiple plots
                 out_dir: Union[bool, str]=False) -> Tuple[plt.figure, plt.Axes]:
         """Export the profile plot figure to PDF and SVG formats.
 
@@ -509,7 +556,7 @@ class SpectralLibraryAnalyser():
         if scope == 'all':
             filename = f'all_entries_by_{groupby.lower()}_profile_plot'
         else:
-            title = scope.title() + ' by ' + groupby.title()
+            title = scope.title() + ' grouped by ' + groupby.title()
             filename = f'{scope}_by_{groupby.lower()}'
 
         if stacked:
@@ -518,11 +565,18 @@ class SpectralLibraryAnalyser():
             filename = filename + '_with_noise'
 
         if self.obj_type == 'observation':
-            title = self.spectra_obj.instrument.name.title() + ' Sampled ' + title
+            if scope != 'all':
+                title = self.spectra_obj.instrument.name.title() + ' Sampled ' + title
             filename = self.spectra_obj.instrument.name + '_sampled_' + filename
 
         if scope != 'all':
-            fig.suptitle(title, fontsize=cfg.LABEL_S)
+            if index:
+                    title = title + f' {index}'
+            fig.suptitle(title, fontsize=cfg.TITLE_S)
+        
+        if index:
+            index = index.replace('(', '').replace(')', '').replace('/', 'of')   
+            filename = filename + f'_{index}' 
                 
         # pdf output
         output_file = Path(out_dir, filename).with_suffix('.pdf')
@@ -555,15 +609,6 @@ class SpectralLibraryAnalyser():
                 'Sample ID', # hue/style by Sample ID
                 'Data ID' # hue/style by Data ID
                 ]='Category', 
-            label_by: Literal[
-                'Library', # label by library
-                'Category', # label by category
-                'Group', # label by group
-                'Subgroup', # label by subgroup
-                'Species', # label by species
-                'Sample ID', # label by Sample ID
-                'Data ID' # label by Data ID
-                ]='Species',  
             stacked: bool=False,
             pad_factor: float=1/6,
             ci: bool=False,
@@ -589,6 +634,14 @@ class SpectralLibraryAnalyser():
 
         axes = []
 
+        if self.obj_type == 'observation':
+            if self.spectra_obj.noisy:
+                with_noise = True
+            else:
+                with_noise = False
+        else:
+            with_noise = False
+
         if scope == 'all':
             # Plot the entire material collection in one figure
 
@@ -597,8 +650,12 @@ class SpectralLibraryAnalyser():
             # get the category and group labels
             groupby_df = self.spectra_obj.main_df.loc[:, groupby]
 
-            # incorporate error DF into this data for plotting
-            all_df = pd.concat([refl_df, groupby_df], axis=1)
+            if with_noise:
+                # add root id to the data_df
+                rootid_df = self.spectra_obj.main_df.loc[:, 'Root Data ID']
+                all_df = pd.concat([refl_df, rootid_df, groupby_df], axis=1)
+            else:            
+                all_df = pd.concat([refl_df, rootid_df, groupby_df], axis=1)
             
             # update to write figure here
             fig, ax = self.setup_plot(all_df, groupby, stacked)
@@ -658,8 +715,12 @@ class SpectralLibraryAnalyser():
                 # get the category and group labels
                 groupby_df = subset_df.loc[:, groupby]
 
-                # incorporate error DF into this data for plotting
-                scope_df = pd.concat([refl_df, groupby_df], axis=1)
+                if with_noise:
+                    # add root id to the data_df
+                    rootid_df = subset_df.loc[:, 'Root Data ID']
+                    scope_df = pd.concat([refl_df, rootid_df, groupby_df], axis=1)
+                else:
+                    scope_df = pd.concat([refl_df, groupby_df], axis=1)
                 
                 sf = s // (max_fig_cols*max_fig_rows)
 
@@ -671,7 +732,7 @@ class SpectralLibraryAnalyser():
                 if sf == 0:
                     col_n = s//fig_rows[sf]
                 else:
-                    col_n = s//fig_rows[sf] - (sf * fig_rows[sf-1])
+                    col_n = (s-(sf*fig_rows[sf-1]*n_cols))//fig_rows[sf]
                 
                 scope_fig, ax = self.setup_plot(
                     scope_df, 
@@ -689,12 +750,22 @@ class SpectralLibraryAnalyser():
                             with_noise=with_noise,
                             hires_under=hires_under,
                             ci=ci)
+                # add letter to the ax title
+                if sf == 0:
+                    subtitle_idx = 65 + s
+                else:
+                    subtitle_idx = 65 + s - (sf*fig_rows[sf-1]*n_cols)                    
+                ax.set_title(f'{chr(subtitle_idx)}. {this_scope.title()}')
                 axes.append(ax)
 
                 subfigs[sf][row_n][col_n] = scope_fig
 
             for f, fig in enumerate(figs):
-                fig, axes = self.export_plot(fig, axes, scope, groupby, stacked, with_noise, out_dir)
+                if n_figs > 1:
+                    index = f'({f+1}/{len(figs)})'
+                else:
+                    index=None
+                fig, axes = self.export_plot(fig, axes, scope, groupby, stacked, with_noise, index, out_dir)
             
             # show the subfigure
             plt.show()
@@ -721,11 +792,19 @@ class SpectralLibraryAnalyser():
             # get the category and group labels
             groupby_df = subset_df.loc[:, groupby]
 
-            # incorporate error DF into this data for plotting
-            all_df = pd.concat([refl_df, groupby_df], axis=1)
+            if with_noise:
+                # add root id to the data_df
+                rootid_df = subset_df.loc[:, 'Root Data ID']
+                all_df = pd.concat([refl_df, rootid_df, groupby_df], axis=1)
+            else:
+                all_df = pd.concat([refl_df, groupby_df], axis=1)
+
+            # update to write figure here
+            fig, ax = self.setup_plot(all_df, groupby, stacked)
             
             ax = self.render_profile_plot(
                         all_df,
+                        ax,
                         scope=scope,
                         groupby=groupby,
                         stacked=stacked,
@@ -733,13 +812,19 @@ class SpectralLibraryAnalyser():
                         with_noise=with_noise,
                         hires_under=hires_under,
                         ci=ci)
+            # remove the given title
+            ax.set_title('')
             axes.append(ax)
+
+            ax = [ax]
+            
+            fig, ax = self.export_plot(fig, ax, scope, groupby, stacked, with_noise, out_dir)
 
             if cfg.TIME_IT:
                 toc = time.perf_counter()
                 print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
             
-            return axes
+            return ax
 
     # """
     # Spectrogram Visualisation & Continuum Removal

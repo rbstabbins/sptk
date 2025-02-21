@@ -219,7 +219,8 @@ class Observation():
         obs_df[self.wvls] = obs_df[self.wvls] + noise_array # update dataframe
         obs_df[self.wvls].clip(lower = 0.0, inplace=True) # clip to range
         # update index for unique ids
-        suffix = obs_df.groupby(level=0).cumcount().astype(str).replace('0','')
+        suffix = obs_df.groupby(level=0).cumcount().astype(str).replace('0','')        
+        obs_df.insert(1, 'Root Data ID', obs_df.index)
         obs_df.index = obs_df.index +'.'+ suffix
         obs_df.index.name = 'Data ID'
 

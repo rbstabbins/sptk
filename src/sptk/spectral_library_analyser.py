@@ -104,7 +104,7 @@ class SpectralLibraryAnalyser():
 
         # if ci, then get mean values
         if noisy:
-            base_df = data_df.groupby(['Root Data ID']).mean(numeric_only=True) # need the root id to work with, to get back to the average values..coudl get it by acting on the pre-noise data_df?
+            base_df = data_df.groupby(['Root Data ID'], sort=False).mean(numeric_only=True) # note order of Root Data ID is not preserved on groupby
             base_df = base_df.reset_index()
         else:
             base_df = data_df
@@ -120,7 +120,7 @@ class SpectralLibraryAnalyser():
             # offset the reflectance
             padding =  max_range * pad_factor
             spec_range[spec_range < padding] = padding
-            offset = - minima + (spec_range+padding).cumsum().shift(periods=1, fill_value = 0) + padding/2
+            offset = - minima + (spec_range+padding).cumsum().shift(periods=1, fill_value = 0) + padding/2            
 
             # now have to expand the offset to the full length of the data_df
             if noisy:
@@ -131,7 +131,7 @@ class SpectralLibraryAnalyser():
             # insert extra space where new group starts
             for i in range(1, len(data_df)):
                 if data_df[groupby][i] != data_df[groupby][i-1]:
-                    offset[i:] += padding  
+                    offset.loc[i:] += padding  
         else:
             max_range = 0 # hack              
     
@@ -139,10 +139,13 @@ class SpectralLibraryAnalyser():
 
         # get the last finite reflectance value of each row
         level = (data_df[wvls].T.apply(lambda x: x[x.notnull()].values[-1])).tolist()  
-                    # now have to expand the offset to the full length of the data_df
+        # for some case here, the offset is resulting in negative 'level' values
+        if min(level) < 0:
+            print('Negative level values detected')
+        # now have to expand the offset to the full length of the data_df
         if noisy:
             n_repeats = int(len(data_df) / len(base_df))
-            level = (data_df.groupby(['Root Data ID']).mean(numeric_only=True).T.apply(lambda x: x[x.notnull()].values[-1]))
+            level = (data_df.groupby(['Root Data ID'], sort=False).mean(numeric_only=True).T.apply(lambda x: x[x.notnull()].values[-1]))
             level.sort_values(inplace=True)
             level = level.repeat(n_repeats).to_list()
         # get the max reflectance value of each row - this is ok to account for noise
@@ -170,7 +173,6 @@ class SpectralLibraryAnalyser():
         new_label = label.copy()
         new_va = va.copy()
    
-        # if max_range is not None:
         i = 1
         c = 1
         while c < len(data_df): # this part is not accounting for noise
@@ -642,8 +644,8 @@ class SpectralLibraryAnalyser():
         else:
             with_noise = False
 
+        # Plot the entire material collection in one figure
         if scope == 'all':
-            # Plot the entire material collection in one figure
 
             # get the reflectance data for whole dataset
             refl_df = self.spectra_obj.get_refl_df()
@@ -680,8 +682,8 @@ class SpectralLibraryAnalyser():
 
             return fig, ax
         
+        # Plot each 'scope' collection in a separate plot
         elif scope in scope_dict.keys():
-            # Plot each 'scope' collection in a separate plot
             
             # get the list of unique values for the scope
             scope_label = scope_dict[scope]
@@ -776,8 +778,8 @@ class SpectralLibraryAnalyser():
 
             return axes
         
+        # Plot the given scope collection in one figure
         else:
-            # Plot the given scope collection in one figure
 
             # find the scope label for the given scope string
             scope_labels = ['Library', 'Category', 'Group', 'Subgroup', 'Species', 'Sample ID']

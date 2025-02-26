@@ -28,7 +28,7 @@ from sptk.spectral_library_analyser import SpectralLibraryAnalyser
 import sptk.config as cfg
 from sptk.config import build_project_directory as build_pd
 
-plt.rcParams['figure.figsize'] = cfg.FIG_SIZE
+# plt.rcParams['figure.figsize'] = cfg.FIG_SIZE
 
 class Observation():
     """Observation Class
@@ -75,6 +75,7 @@ class Observation():
         self.chnl_lbls = ['R' + str(s) for s in self.wvls] #label as R[cwl]
 
         self.noisy = False # flag for noisy data
+        self.continuum_removed = False # flag for continuum removed data
 
         if load_existing:
             existing_pkl_path = Path(self.object_dir, 'observation.pkl')
@@ -176,7 +177,7 @@ class Observation():
             n_duplicates: int,            
             snr: Union[float, np.array]=None,   
             spd: np.array = None,         
-            apply: bool = True) -> pd.DataFrame:
+            seed: int=None) -> pd.DataFrame:
         """Add n_duplicates of noisey entries to the sampled data,
         under assumption of Gaussian distribution of noise, given by 1-sigma
         argument.
@@ -200,8 +201,18 @@ class Observation():
         :return: the main dataframe
         :type return: pd.DataFrame
         """
+        if cfg.TIME_IT:
+            tic = time.perf_counter()            
+            
+        # stash or access the no-noise data
+        if not self.noisy:
+            self.noiseless_df = self.main_df.copy()
+        else:
+            self.noiseless_df = self.noiseless_df.copy()
+        
         # access the observation dataframe and make duplicates of each entry
-        obs_df = pd.concat([self.main_df].copy()*n_duplicates).sort_index()
+        obs_df = pd.concat([self.noiseless_df].copy()*n_duplicates).sort_index()
+
         # apply noise to the duplicate entries  
         if snr is None:    
             snr = self.instrument.main_df['snr'].to_numpy()  
@@ -214,22 +225,41 @@ class Observation():
             noise = np.divide(np.sqrt(obs_df[self.wvls].to_numpy()), snr)
         else:
             noise = obs_df[self.wvls].to_numpy()/snr        
+
+        if seed is not None:
+            np.random.seed(seed) # set the seed of the random distribution
         noise_array = np.random.normal(0.0, noise, obs_df[self.wvls].shape)
 
-        obs_df[self.wvls] = obs_df[self.wvls] + noise_array # update dataframe
-        obs_df[self.wvls].clip(lower = 0.0, inplace=True) # clip to range
-        # update index for unique ids
+        obs_df.loc[:, self.wvls] = obs_df.loc[:, self.wvls] + noise_array # update dataframe
+        obs_df.loc[:, self.wvls].clip(lower = 0.0, inplace=True) # clip to range
+        # # update index for unique ids
         suffix = obs_df.groupby(level=0).cumcount().astype(str).replace('0','')        
         obs_df.insert(1, 'Root Data ID', obs_df.index)
         obs_df.index = obs_df.index +'.'+ suffix
         obs_df.index.name = 'Data ID'
 
-        if apply:
-            self.main_df = obs_df # update the main_df
-            self.noisy = True # update the noisy flag
+        self.main_df = obs_df # update the main_df
+        self.noisy = True # update the noisy flag
 
+        if cfg.TIME_IT:
+            toc = time.perf_counter()
+            print(f"Noise added in {toc - tic:0.4f} seconds.")
+            
         return obs_df
 
+    # def remove_continuum(self) -> pd.DataFrame:
+    #     """Remove the continuum from the observation data.
+
+    #     :return: continuum removed observation data
+    #     :rtype: pd.DataFrame
+    #     """
+    #     # remove the continuum from the observation data
+    #     sla = SpectralLibraryAnalyser(self)
+    #     obs_refl = sla.remove_continuum() # note this is very inefficient for noisy data
+    #     self.set_refl_data(obs_refl)
+    #     self.continuum_removed = True
+    #     return obs_refl
+    
     # """
     # RMSE Computation between Observation and Material Collection
     # """

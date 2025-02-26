@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from typing import Tuple, Literal
 import numpy as np
+import matplotlib.font_manager as fm
 
 TIME_IT = False # report process durations
 
@@ -38,6 +39,10 @@ PLT_FRMT = '.pdf' # '.png' or '.pdf' or '.eps' etc.
 LABEL_S = 8
 TITLE_S = 10
 LEGEND_S = 6
+
+# TITLE_FONT = fm.FontProperties(fname='./fonts/NHMWallopText-SemiBold.otf')
+# LABEL_FONT = fm.FontProperties(fname="./fonts/NHMWallopText-Medium.otf")
+# LEGEND_FONT = fm.FontProperties(fname="./fonts/NHMWallopText-SemiBold.otf")   
 
 # TODO - make Tex rendering global. #plt.rcParams['text.usetex'] = True
 

@@ -250,8 +250,7 @@ class SpectralLibraryAnalyser():
             title = title
             filename = filename + '_stacked'
 
-        if self.obj_type == 'observation':
-            if self.spectra_obj.noisy:
+        if self.spectra_obj.noisy:
                 with_noise = True
         else:
             with_noise = False
@@ -636,11 +635,8 @@ class SpectralLibraryAnalyser():
 
         axes = []
 
-        if self.obj_type == 'observation':
-            if self.spectra_obj.noisy:
-                with_noise = True
-            else:
-                with_noise = False
+        if self.spectra_obj.noisy:
+            with_noise = True
         else:
             with_noise = False
 
@@ -832,7 +828,7 @@ class SpectralLibraryAnalyser():
     # Spectrogram Visualisation & Continuum Removal
     # """
 
-    def remove_continuum(self):
+    def remove_continuum(self, plot: bool=False):
         """Remove the continuum from all spectra, and overwrite the local copy
         of the spectra object reflectance data.
         """
@@ -855,12 +851,13 @@ class SpectralLibraryAnalyser():
             except (ValueError, TypeError) as error:
                 print(index)
                 raise error
-            path = Path(
-                    self.spectra_obj_cr.object_dir,
-                    'cr_algorithm_plots',
-                    cat_s.loc[index].Category)
-            path.mkdir(parents=True, exist_ok=True)
-            schq.plot(path, index, suffix=None)
+            if plot:
+                path = Path(
+                        self.spectra_obj_cr.object_dir,
+                        'cr_algorithm_plots',
+                        cat_s.loc[index].Category)
+                path.mkdir(parents=True, exist_ok=True)
+                schq.plot(path, index, suffix=None)
             # make sure that the correct wavelengths are added back in after
             spectra.loc[index][notnans] = schq.get_continuum_removed_spectrum()
         # rewrite spectra_obj object with continuum removed spectra

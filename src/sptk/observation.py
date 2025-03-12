@@ -946,7 +946,6 @@ class Observation():
                     groupby: str='Category',
                     pad_factor: float=1/6,
                     ci: bool=False,
-                    with_noise: bool=False,
                     hires_under: bool=False,
                     ) -> plt.Axes:
         """Plot the profiles of the materials
@@ -958,7 +957,6 @@ class Observation():
                         groupby=groupby,
                         pad_factor=pad_factor,
                         ci=ci,
-                        with_noise=with_noise,
                         hires_under=hires_under)
         return axes
     

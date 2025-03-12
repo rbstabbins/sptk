@@ -367,3 +367,13 @@ RELAB_ALL_GROUPS = {
         'sulfide': RELAB_SULFIDES['sulfide'],
         'sulfate': RELAB_SULFATES['sulfate'],
         'tectosilicate': RELAB_TECTOSILICATES['tectosilicate']}
+
+def print_set(material_set: dict):
+    print('Category')
+    print('└── Species: IDs')
+    print('---------------------------------')
+    for category in material_set:
+        print(category.title())
+        for species in material_set[category]:
+            print('└── '+species[0].title()+': '+species[1])
+        print('---------------------------------')

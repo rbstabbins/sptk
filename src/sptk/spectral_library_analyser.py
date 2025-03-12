@@ -195,12 +195,82 @@ class SpectralLibraryAnalyser():
 
         return data_df, offset, annotations
 
+    def setup_plot(self, 
+                   dataframe: pd.DataFrame,
+                   groupby: str, 
+                   stacked: bool=False,
+                   subfig: plt.figure=None) -> Tuple[plt.figure, plt.Axes]:
+        """Setup a profile plot figure and axes.
+
+        :param dataframe: the data that will be plotted
+        :type dataframe: pd.DataFrame
+        :param groupby: _description_
+        :type groupby: str
+        :param stacked: _description_, defaults to False
+        :type stacked: bool, optional
+        :return: _description_
+        :rtype: Tuple[plt.figure, plt.Axes]
+        """  
+
+        # problem - this aspect ratio is for an axes object, 
+        # including the legend, or for a stacked figure.
+        width_factor = 1 # + 0.3
+        height_factor = 1 #1.1 # allow for legend at bottom
+        if stacked:
+            # stretch the vertical axis of the plot
+            # assume that ~6 entries will fit per height_factor of 1 
+            if 'Root Data ID' in dataframe.columns:
+               height_factor = max(len(dataframe['Root Data ID'].unique()) / 6, height_factor)               
+            else:
+                height_factor = max(len(dataframe) / 6, height_factor)
+            width_factor = width_factor # * 1.2
+        else:
+            # extend the bottom of the figure to accomodate the legend
+            # get number of entries in the legend, determined by groupby
+            labels = dataframe[groupby].unique().tolist()
+            # get estimate of cumulative length in inches of horizontal 
+            # legend, if as a single row
+            label_len_chars = np.array([len(label) for label in labels]).cumsum()
+            # assume char width is 0.5 char height, handle line is 4 chars
+            label_len_inches = (4 + label_len_chars)*cfg.LEGEND_S/72/2
+            # all for estimate of row length to be 1/2 figure width
+            n_rows = 1 + (label_len_inches[-1]) // (cfg.FIG_SIZE[0]/2)
+            n_cols = len(labels) // n_rows
+            # give 0.1 inch per row of legend, + offset
+            height_factor = height_factor + n_rows*0.1 
+
+        # limit the height to 3
+        height_factor = min(height_factor, 3)
+
+        fig_size = (width_factor*cfg.FIG_SIZE[0], height_factor*cfg.FIG_SIZE[1])
+        if subfig is not None:
+            # set the subfigure size
+            ax = subfig.add_subplot()
+            fig = subfig
+        else:
+            fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI, layout='constrained')
+
+        # set up the plot
+        sns.set_context("paper")
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
+
+        return fig, ax
+
     def render_profile_plot(self,
             data_df: pd.DataFrame,
             ax: plt.Axes,
             scope: Literal[
                 'all', # all data
-                str # specific category, group, subgroup, species, or sample
+                'Libraries', # 1 subplot for each library
+                'Categories', # 1 subplot for each category
+                'Groups', # 1 subplot for each group
+                'Subgroups', # 1 subplot for each subgroup
+                'Species', # 1 subplot for each species
+                'Sample IDs', # 1 subplot for each sample
+                'Data IDs', # 1 subplot for each data ID
+                str # 1 subplot for a specific category, group, subgroup, species, or sample
                 ]='all',         
             groupby: Literal[
                 'Library', # hue/style by library
@@ -213,60 +283,62 @@ class SpectralLibraryAnalyser():
                 ]='Category',    
             stacked: bool=False,
             pad_factor: float=1/6,
-            ci: bool=False,
-            with_noise: bool=False, # think this can be deprecated
+            ci: bool=False,            
             hires_under: bool=False,
             out_dir: Union[bool, str]=False) -> None:
         """Method for producing the plot itself, according to given DataFrame,
-        class, Species, and scope.
+        scope and groupby keywords.
 
-        :param data_df: Material Collection or Observation to DataFrame
+        :param data_df: Material Collection or Observation scope/groupby 
+            DataFrame subset.
         :type data_df: pd.DataFrame
-        :param cat: Class label, defaults to 'all'
-        :type cat: str, optional
-        :param mnrl: Species, defaults to 'entries'
-        :type mnrl: str, optional
-        :param ci: Plot mean spectra with confidence interval, defaults to False
-        :type ci: bool, optional
-        :param scope: indicates specific elements or all data, defaults to 'all'
+        :param ax: Axes object to plot on
+        :type ax: plt.Axes
+        :param scope: Indicates subplot groupings, defaults to 'all'
         :type scope: str, optional
-        :param with_noise: Indicates if noise has been added, defaults to False
-        :type with_noise: bool, optional
+        :param groupby: Indicates hue/style groupings, defaults to 'Category'
+        :type groupby: str, optional
+        :param stacked: Plot stacked spectra, defaults to False
+        :type stacked: bool, optional
+        :param pad_factor: Adjust the padding factor for stacked spectra, 
+            defaults to 1/6
+        :type pad_factor: float, optional
+        :param ci: Plot mean spectra with confidence interval if dataset is 
+            noisy, defaults to False
+        :type ci: bool, optional
         :param hires_under: for Observation under-plot the laboratory spectra, 
                             defaults to False
         :type hires_under: bool, optional
         """
 
-        # set axes title
+        # set title and filename
         if scope == 'all':
-            # title is the project name
             title = 'All Entries by ' + groupby
             filename = f'all_entries_by_{groupby.lower()}_profile_plot'
         else:
             title = scope.title()
-            filename = f'{scope}_{groupby.lower()}'
+            filename = f'{scope}_by_{groupby.lower()}'
 
         if stacked:
-            title = title
             filename = filename + '_stacked'
 
         if self.spectra_obj.noisy:
-                with_noise = True
+            with_noise = True
+            title = title + ' with Noise'
+            filename = filename + '_with_noise'
         else:
             with_noise = False
 
-        if with_noise: # worry about this for observations
-            title = title + ' with Noise'
-            filename = filename + '_with_noise'
-
         if self.obj_type == 'observation':
-            title = self.spectra_obj.instrument.name.title() + ' Sampled ' + title
-            filename = self.spectra_obj.instrument.name + '_sampled_' + filename
+            inst = self.spectra_obj.instrument.name            
+            title = inst.title() + ' Sampled ' + title
+            filename = inst + '_sampled_' + filename
 
         # prepare data frame for plotting
         data_ids = data_df.index
         data_df = data_df.reset_index()
 
+        # offset specta for plotting
         if stacked:
             data_df, offset, annotations = SpectralLibraryAnalyser.stack_spectra(data_df, self.spectra_obj.wvls, noisy=with_noise, pad_factor=pad_factor)
             
@@ -274,10 +346,11 @@ class SpectralLibraryAnalyser():
         if with_noise:
             data_df =pd.melt(data_df, id_vars=['Data ID', groupby, 'Root Data ID'])
         else:
-            data_df =pd.melt(data_df, id_vars=['Data ID',groupby]) # do we need group, subgroup, species?
+            data_df =pd.melt(data_df, id_vars=['Data ID',groupby])
 
         # y_max = max([1.0, data_df.value.max()])
 
+        # set plot properties
         hue_flag = groupby
 
         if self.obj_type == 'observation':
@@ -289,30 +362,28 @@ class SpectralLibraryAnalyser():
         if n_channels > 24:
             marker_flag = False  
 
-        if ci:            
-            sns.lineplot(
-                data=data_df,
-                x='variable',
-                y='value',
-                hue=hue_flag,
-                style=hue_flag,
-                markeredgewidth=0.0,
-                markers=marker_flag,                
-                errorbar='sd',
-                lw=0.7,
-                ax=ax)
+        if ci:
+            errobar = 'sd'
+            units=None
+            estimator='mean'
         else:
-            sns.lineplot(
-                data=data_df,
-                x='variable',
-                y='value',
-                hue=hue_flag,
-                style=hue_flag,
-                markeredgewidth=0.0,
-                units='Data ID',
-                estimator=None,
-                lw=0.5, markers=marker_flag,
-                ax=ax)
+            units = 'Data ID'
+            errobar = None
+            estimator=None
+
+        sns.lineplot(
+            data=data_df,
+            x='variable',
+            y='value',
+            hue=hue_flag,
+            style=hue_flag,
+            markeredgewidth=0.0,
+            markers=marker_flag,
+            units=units,
+            estimator=estimator,
+            errorbar=errobar,
+            lw=0.5, 
+            ax=ax)
 
         # format axes
         # set axes limits according to spectarl object spectral range
@@ -320,7 +391,14 @@ class SpectralLibraryAnalyser():
         # ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         if stacked:
-            ax.set_ylim(bottom=0.0, top=data_df['value'].max()*1.01) # need a way to add the height of the annotations - 0.2 isn't a good hack. could just let annotations sit outside plot.            
+            
+            # get font ehight in y-axis data units
+            inv = ax.transData.inverted()
+            fig_dpi = cfg.DPI  # Dots per inch of the figure
+            font_height_display = (cfg.LEGEND_S+1) / 72 * fig_dpi  # Convert points to pixels (1 point = 1/72 inch)            
+            _, font_height_data = inv.transform((0, font_height_display)) - inv.transform((0, 0)) # Convert from display (pixel) coordinates to data coordinates
+            
+            ax.set_ylim(0, annotations['level'].max()+font_height_data)
             ax.set_ylabel('Stacked Reflectance', fontsize=cfg.LABEL_S)
             ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
         else:
@@ -355,11 +433,9 @@ class SpectralLibraryAnalyser():
         # add IR active band locations
             
 
-        # format legend
+        # format legend and scope and groupby labels
         handles, labels = ax.get_legend_handles_labels()
         if stacked:
-            # drop the y-axis labels
-            # ax.set_yticklabels([])
             # annotate the spectra with the Data ID
             # get legend labels
             for idx, annotation in annotations.iterrows():
@@ -452,144 +528,6 @@ class SpectralLibraryAnalyser():
 
         return ax
 
-    def setup_plot(self, 
-                   dataframe: pd.DataFrame,
-                   groupby: str, 
-                   stacked: bool=False,
-                   subfig: plt.figure=None) -> Tuple[plt.figure, plt.Axes]:
-        """Setup a profile plot figure and axes.
-
-        :param dataframe: the data that will be plotted
-        :type dataframe: pd.DataFrame
-        :param groupby: _description_
-        :type groupby: str
-        :param stacked: _description_, defaults to False
-        :type stacked: bool, optional
-        :return: _description_
-        :rtype: Tuple[plt.figure, plt.Axes]
-        """  
-
-        # problem - this aspect ratio is for an axes object, 
-        # including the legend, or for a stacked figure.
-        width_factor = 1 # + 0.3
-        height_factor = 1 #1.1 # allow for legend at bottom
-        if stacked:
-            # stretch the vertical axis of the plot
-            # assume that ~6 entries will fit per height_factor of 1 
-            if 'Root Data ID' in dataframe.columns:
-               height_factor = max(len(dataframe['Root Data ID'].unique()) / 6, height_factor)               
-            else:
-                height_factor = max(len(dataframe) / 6, height_factor)
-            width_factor = width_factor # * 1.2
-        else:
-            # extend the bottom of the figure to accomodate the legend
-            # get number of entries in the legend, determined by groupby
-            labels = dataframe[groupby].unique().tolist()
-            # get estimate of cumulative length in inches of horizontal 
-            # legend, if as a single row
-            label_len_chars = np.array([len(label) for label in labels]).cumsum()
-            # assume char width is 0.5 char height, handle line is 4 chars
-            label_len_inches = (4 + label_len_chars)*cfg.LEGEND_S/72/2
-            # all for estimate of row length to be 1/2 figure width
-            n_rows = 1 + (label_len_inches[-1]) // (cfg.FIG_SIZE[0]/2)
-            n_cols = len(labels) // n_rows
-            # give 0.1 inch per row of legend, + offset
-            height_factor = height_factor + n_rows*0.1 
-
-        # limit the height to 3
-        height_factor = min(height_factor, 3)
-
-        fig_size = (width_factor*cfg.FIG_SIZE[0], height_factor*cfg.FIG_SIZE[1])
-        if subfig is not None:
-            # set the subfigure size
-            ax = subfig.add_subplot()
-            fig = subfig
-        else:
-            fig, ax = plt.subplots(figsize=fig_size, dpi=cfg.DPI, layout='constrained')
-
-        # set up the plot
-        sns.set_context("paper")
-        # use futura font
-        plt.rcParams['font.family'] = 'sans-serif'
-        plt.rcParams['font.sans-serif'] = 'Futura'
-
-        return fig, ax
-
-    def export_plot(self, 
-                fig, 
-                axes, 
-                scope,
-                groupby: str, 
-                stacked: bool=False, 
-                with_noise: bool=False, 
-                index: str=None, # for saving multiple plots
-                out_dir: Union[bool, str]=False) -> Tuple[plt.figure, plt.Axes]:
-        """Export the profile plot figure to PDF and SVG formats.
-
-        :param fig: the figure to be exported
-        :type fig: plt.figure
-        :param axes: the axes to be exported
-        :type axes: plt.Axes
-        :param groupby: _description_
-        :type groupby: str
-        :param stacked: _description_, defaults to False
-        :type stacked: bool, optional
-        :param with_noise: _description_, defaults to False
-        :type with_noise: bool, optional
-        :param out_dir: _description_, defaults to False
-        :type out_dir: Union[bool, str], optional
-        :return: _description_
-        :rtype: Tuple[plt.figure, plt.Axes]
-        """
-
-        # do formatting of figure here
-
-        # fig.tight_layout()
-
-        # save figure
-        if out_dir:
-            out_dir = Path(out_dir)
-        else:
-            out_dir = Path(self.spectra_obj.object_dir / 'plots')
-            out_dir.mkdir(parents=True, exist_ok=True)
-
-        # set figure filename and title
-        if scope == 'all':
-            filename = f'all_entries_by_{groupby.lower()}_profile_plot'
-        else:
-            title = scope.title() + ' grouped by ' + groupby.title()
-            filename = f'{scope}_by_{groupby.lower()}'
-
-        if stacked:
-            filename = filename + '_stacked'
-        if with_noise: # worry about this for observations
-            filename = filename + '_with_noise'
-
-        if self.obj_type == 'observation':
-            if scope != 'all':
-                title = self.spectra_obj.instrument.name.title() + ' Sampled ' + title
-            filename = self.spectra_obj.instrument.name + '_sampled_' + filename
-
-        if scope != 'all':
-            if index:
-                    title = title + f' {index}'
-            fig.suptitle(title, fontsize=cfg.TITLE_S)
-        
-        if index:
-            index = index.replace('(', '').replace(')', '').replace('/', 'of')   
-            filename = filename + f'_{index}' 
-                
-        # pdf output
-        output_file = Path(out_dir, filename).with_suffix('.pdf')
-        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='pdf')
-
-        # svg output
-        plt.rcParams['svg.fonttype'] = 'none'
-        output_file = Path(out_dir, filename).with_suffix('.svg')
-        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='svg')        
-    
-        return fig, axes
-
     def plot_profiles(self,
             scope: Literal[
                 'all',
@@ -613,7 +551,6 @@ class SpectralLibraryAnalyser():
             stacked: bool=False,
             pad_factor: float=1/6,
             ci: bool=False,
-            with_noise: bool=False,
             hires_under: bool=False,
             out_dir: Union[bool, str]=False
             ) -> Tuple[plt.figure, plt.Axes]:
@@ -665,7 +602,6 @@ class SpectralLibraryAnalyser():
                         groupby=groupby,
                         stacked=stacked,
                         pad_factor=pad_factor,
-                        with_noise=with_noise,
                         hires_under=hires_under,
                         ci=ci)
             ax = [ax]
@@ -745,7 +681,6 @@ class SpectralLibraryAnalyser():
                             groupby=groupby,
                             stacked=stacked,
                             pad_factor=pad_factor,
-                            with_noise=with_noise,
                             hires_under=hires_under,
                             ci=ci)
                 # add letter to the ax title
@@ -807,7 +742,6 @@ class SpectralLibraryAnalyser():
                         groupby=groupby,
                         stacked=stacked,
                         pad_factor=pad_factor,
-                        with_noise=with_noise,
                         hires_under=hires_under,
                         ci=ci)
             # remove the given title
@@ -823,6 +757,81 @@ class SpectralLibraryAnalyser():
                 print(f"Reflectance profiles plotted in {toc - tic:0.4f} s.")
             
             return ax
+
+    def export_plot(self, 
+                fig, 
+                axes, 
+                scope,
+                groupby: str, 
+                stacked: bool=False, 
+                with_noise: bool=False, 
+                index: str=None, # for saving multiple plots
+                out_dir: Union[bool, str]=False) -> Tuple[plt.figure, plt.Axes]:
+        """Export the profile plot figure to PDF and SVG formats.
+
+        :param fig: the figure to be exported
+        :type fig: plt.figure
+        :param axes: the axes to be exported
+        :type axes: plt.Axes
+        :param groupby: _description_
+        :type groupby: str
+        :param stacked: _description_, defaults to False
+        :type stacked: bool, optional
+        :param with_noise: _description_, defaults to False
+        :type with_noise: bool, optional
+        :param out_dir: _description_, defaults to False
+        :type out_dir: Union[bool, str], optional
+        :return: _description_
+        :rtype: Tuple[plt.figure, plt.Axes]
+        """
+
+        # do formatting of figure here
+
+        # fig.tight_layout()
+
+        # save figure
+        if out_dir:
+            out_dir = Path(out_dir)
+        else:
+            out_dir = Path(self.spectra_obj.object_dir / 'plots')
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+        # set figure filename and title
+        if scope == 'all':
+            filename = f'all_entries_by_{groupby.lower()}_profile_plot'
+        else:
+            title = scope.title() + ' grouped by ' + groupby.title()
+            filename = f'{scope}_by_{groupby.lower()}'
+
+        if stacked:
+            filename = filename + '_stacked'
+        if with_noise: # worry about this for observations
+            filename = filename + '_with_noise'
+
+        if self.obj_type == 'observation':
+            if scope != 'all':
+                title = self.spectra_obj.instrument.name.title() + ' Sampled ' + title
+            filename = self.spectra_obj.instrument.name + '_sampled_' + filename
+
+        if scope != 'all':
+            if index:
+                    title = title + f' {index}'
+            fig.suptitle(title, fontsize=cfg.TITLE_S)
+        
+        if index:
+            index = index.replace('(', '').replace(')', '').replace('/', 'of')   
+            filename = filename + f'_{index}' 
+                
+        # pdf output
+        output_file = Path(out_dir, filename).with_suffix('.pdf')
+        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='pdf')
+
+        # svg output
+        plt.rcParams['svg.fonttype'] = 'none'
+        output_file = Path(out_dir, filename).with_suffix('.svg')
+        fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='svg')
+    
+        return fig, axes
 
     # """
     # Spectrogram Visualisation & Continuum Removal
@@ -1550,241 +1559,6 @@ class SpectralLibraryAnalyser():
 
         return false_col_obj
     
-    # def render_colour_rendition_chart(self,
-    #         conditions: Dict,
-    #         srgb_compare: Union[bool, object]=False
-    #         ) -> Tuple[plt.figure, plt.axes]:
-    #     """Render the colour of each entry in the spectral library according
-    #     to the given computed colour coordinates.
-    #     Arrange on Colour Rendition Charts as defined by Colour Science library.
-
-    #     :param conditions: Conditions used in the colour computation
-    #     :type conditions: str
-    #     :param srgb_compare: Indicate if sRGB comparison is to be made against 
-    #         the provided MaterialCollection (object), defaults to False
-    #     :type srgb_compare: Union[bool, object], optional
-    #     :return: Figure and Axes of the plot
-    #     :rtype: Tuple[plt.figure, plt.axes]
-    #     """
-        
-    #     # title_sfx = conditions
-    #     title_sfx = conditions['label']
-        
-    #     # if compare, load the comparison material collection colour df
-    #     if srgb_compare and self.obj_type == 'observation':
-    #         srgb_obj = srgb_compare.material_collection
-    #         srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
-    #         srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
-    #         srgb_cats = srgb_obj.colour_df['Category']
-    #         title_sfx = f"sRGB vs. {title_sfx}"
-
-    #     # ***Configure Page Layout(s) and Matplotlib Figure(s)***
-    #     # Parse through the complete spectral library to count
-    #     # the number of pages needed and the distribution of the categories
-    #     # and mineral groups over the columns and rows of each page.
-
-    #     # define page settings
-    #     N_rows = 8 # max number of rows allowed for 1 page  (1 fig)
-    #     N_cols = 6 # max number of columns allowed for 1 page (1 fig)
-    #     spacing = 1.0 # space in inches between rows and columns
-
-    #     # initiate category counter dicts
-    #     cat_ns = {}     # dict of entries in each category        
-    #     cat_cols = {}   # dict of columns needed for each category
-    #     cat_rows = {}   # dict of rows needed for each category
-    #     t_rows = 0 # counter of total number of rows needed for all categories
-
-    #     # populate category counters
-    #     index = self.spectra_obj.main_df.index
-    #     cats = self.spectra_obj.main_df['Category'][index]
-    #     for cat in cats.unique():
-    #         cat_n = len(cats[cats == cat]) # number of entries in given category
-    #         cat_ns[cat] = cat_n # dict lookup of # entries in category
-    #         if cat_n >= N_cols: # if there are more entries than columns...
-    #             cat_cols[cat] = N_cols  # ...set number of columns to N_cols
-    #              # compute the number of rows needed given the fixed # columns
-    #             cat_rows[cat] = int(np.ceil(cat_n / N_cols))
-    #         else: # otherwise the number of columns is the number of entries
-    #             cat_cols[cat] = cat_n 
-    #             cat_rows[cat] = 1 # and the numebr of rows is 1                        
-    #         t_rows += cat_rows[cat] # running total of rows needed for all categories
-
-    #     N_pages = 1 + (t_rows-1) // N_rows # number of pages needed to plot all
-        
-    #     # Build a map of distribution of categories and entries across the pages
-    #     page_cats = {} # dict of pages with categories and entry indices
-    #     page = 0
-    #     cat_list = cats.unique().to_list()
-    #     cat = cat_list.pop()
-    #     cat_rows_left = cat_rows[cat]
-    #     i = 0 # initialise the first index of the category
-    #     f = 0 # initialise the last index of the category
-    #     page_cats[page] = {} # initialise the first page cat dictionary
-    #     page_rows = 0
-        
-    #     rows_used = 0  # count the used rows of the page
-    #     # if it hits N_rows, then move to next page
-    #     while rows_used < t_rows:  # stop when every row is rendered                     
-    #         if cat_rows_left + page_rows < N_rows: 
-    #             # if the rest of the category fits on the page,
-    #             # add the category to the page
-    #             f = i + cat_rows_left*N_cols - 1
-    #             page_cats[page][cat] = (i,f)
-    #             page_rows += cat_rows_left
-    #             rows_used += cat_rows_left
-    #             if f < i:                    
-    #                 raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
-    #             if len(cat_list) > 0:
-    #                 cat = cat_list.pop()
-    #                 cat_rows_left = cat_rows[cat]
-    #                 i = 0                
-    #         elif cat_rows_left + page_rows == N_rows: 
-    #             # if the rest of the category fills the page,
-    #             # add the category to the page
-    #             f = i + cat_rows_left*N_cols - 1
-    #             page_cats[page][cat] = (i,f)
-    #             page_rows += cat_rows_left
-    #             rows_used += cat_rows_left
-    #             if f < i:
-    #                 raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
-    #             if len(cat_list) > 0:
-    #                 cat = cat_list.pop()
-    #                 cat_rows_left = cat_rows[cat]
-    #                 i = 0
-    #             if rows_used < t_rows:
-    #                 page += 1
-    #                 page_rows = 0
-    #                 page_cats[page] = {}
-    #         elif cat_rows_left + page_rows > N_rows: 
-    #             # if the rest of the category does not fit on the page,
-    #             # only use rows up to total of N_rows
-    #             cat_r = N_rows - page_rows # the number of rows available
-    #             f = i + cat_r*N_cols - 1
-    #             cat_rows_left -= cat_r
-    #             rows_used += cat_r
-    #             page_rows += cat_r
-    #             page_cats[page][cat] = (i,f)
-    #             if f < i:
-    #                 raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
-    #             page += 1
-    #             page_rows = 0
-    #             page_cats[page] = {}
-    #             i = f + 1
-
-    #     # ***Render the Colour Contact Sheet according to the above mapping***
-    #     figs = []
-    #     axes = []
-    #     for page in np.arange(N_pages):
-            
-    #         # *** Formatting the page of the figure ***
-            
-    #         # get the categories on the page
-    #         cats_on_page = list(page_cats[page].keys())
-
-    #         # get the total number of rows used on the page
-    #         rows_used = 0
-    #         for cat in cats_on_page:    
-    #             page_cat_i = page_cats[page][cat][0]
-    #             page_cat_f = page_cats[page][cat][1]
-    #             cat_rows_used = int((page_cat_f - page_cat_i + 1) / N_cols)
-    #             rows_used += cat_rows_used
-            
-    #         # draw figure on page
-    #         fig = plt.figure(
-    #             figsize=(N_cols*spacing, rows_used*spacing), 
-    #             dpi=cfg.DPI, 
-    #             layout='compressed')
-    #         spec = fig.add_gridspec(rows_used,1) # use gridspec to handle multi-page plots
-
-    #         # *** Drawing the figure on the page ***
-
-    #         r = 0 # initialise the row counter
-    #         for c, cat in enumerate(cats_on_page):
-                
-    #             # use scatterplot to distribute entries evenly over the N_cols 
-    #             # and N_rows of the grid.
-
-    #             # get the index of the samples in this category    
-    #             i = page_cats[page][cat][0]
-    #             f = page_cats[page][cat][1]            
-    #             cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]
-    #             cat_rgb = cat_df[conditions['label']][['R', 'G', 'B']].iloc[i:f+1]
-                
-    #             # get the number of rows used by this category
-    #             cat_r = int((f - i + 1) / N_cols)
-
-    #             # add a subplot for the category
-    #             ax_c = fig.add_subplot(spec[r:r+cat_r, :], adjustable='box')
-
-    #             r += cat_r
-
-    #             # get the index of the comparison samples in this category
-    #             if srgb_compare and self.obj_type == 'observation':
-    #                 srgb_obj = srgb_compare.material_collection
-    #                 srgb_cat_df = srgb_obj.colour_df[srgb_obj.colour_df['Category'] == cat]
-    #                 srgb_cat_rgb = srgb_cat_df[['R', 'G', 'B']].iloc[i:f+1]                
-
-    #             for i, entry in enumerate(cat_rgb.index):
-                    
-    #                 x = i % cat_cols[cat] + 0.5
-    #                 y = np.ceil(i // cat_cols[cat]) + 0.5
-
-    #                 if srgb_compare and self.obj_type == 'observation':
-    #                     srgb_col = srgb_cat_rgb.loc[entry].to_numpy()
-    #                     ax_c.scatter(x-0.15,y,
-    #                                     color=srgb_col,
-    #                                     s=200,
-    #                                     edgecolor='black')
-    #                     col = cat_rgb.loc[entry].to_numpy()
-    #                     ax_c.scatter(x+0.15,y,
-    #                                     color=col,
-    #                                     s=200,
-    #                                     edgecolor='black')
-    #                 else:
-    #                     col = cat_rgb.loc[entry].to_numpy()
-    #                     ax_c.scatter(x,y,
-    #                                     color=col,
-    #                                     s=200,
-    #                                     edgecolor='black')
-                    
-    #                 # annotate                                        
-    #                 min_name = self.spectra_obj.main_df.loc[entry]['Species']
-    #                 entry = str(entry).replace('_', '\n') # turn underscore into carriage return
-    #                 entry = str(entry).replace(' ', '\n') # get Species
-    #                 entry = entry.title() 
-    #                 entry = min_name.title() + '\n' + entry
-    #                 ax_c.annotate(entry, (x, y), 
-    #                                  (0,-1.5), 
-    #                                  textcoords='offset fontsize', 
-    #                                  fontsize=cfg.LEGEND_S, 
-    #                                  ha='center', va='top')
-    #             # remove the axes
-    #             ax_c.set_xlim(0, cat_cols[cat], auto=False)
-    #             ax_c.set_ylim(0, cat_r, auto=False)
-    #             ax_c.invert_yaxis()
-    #             ax_c.set_aspect('equal', adjustable='box', share=True)
-    #             ax_c.axis('off')
-    #             # set title
-    #             ax_c.set_title(str.capitalize(cat), 
-    #                            fontsize=cfg.TITLE_S, 
-    #                            y = 1.0, 
-    #                            verticalalignment= 'bottom', 
-    #                            pad=-cfg.TITLE_S)            
-    #         fig.suptitle(f'{self.spectra_obj.spectral_library} '+title_sfx, fontsize=cfg.TITLE_S)
-    #         fig.tight_layout()
-
-    #         # export page as pdf page
-    #         contact_sheet_dir=Path(self.project_dir,'contact_sheet')            
-    #         contact_sheet_dir.mkdir(parents=True, exist_ok=True)
-    #         filename = f'{self.spectra_obj.spectral_library} {conditions["label"]} page_{page}'
-    #         filepath=Path(contact_sheet_dir, filename).with_suffix('.pdf') # locked as PDF not PNG
-    #         plt.savefig(filepath, bbox_inches='tight', pad_inches = 0.1)
-
-    #         figs.append(fig)
-    #         axes.append(ax_c)
-        
-    #     return figs, axes
-
     def render_colour_contact_sheet(self,
             conditions: Dict,
             srgb_compare: Union[bool, object]=False

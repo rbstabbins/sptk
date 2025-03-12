@@ -107,6 +107,8 @@ class MaterialCollection():
         self.allow_out_of_bounds = allow_out_of_bounds
         self.header_list = HEADER_LIST
 
+        self.noisy = False # generally not used for a Material Collection
+
         # find the existing pickle file of the MaterialCollection DataFrame,
         # or make a new one from the material file dictionary
         if load_existing:
@@ -266,6 +268,10 @@ class MaterialCollection():
         main_df = MaterialCollection.init_frame(
             self.categories, self.material_file_dict)
         filepaths = main_df['Filepath'].tolist()
+        last_cat = None
+        last_group = None
+        last_subgroup = None
+        last_species = None
         with click.progressbar(filepaths) as load_bar:
             for filepath in load_bar:  # for each file, load_material
                 new_entry = MaterialCollection.load_material(filepath)
@@ -289,21 +295,38 @@ class MaterialCollection():
                 else:
                     species = None
                 cat = main_df[main_df.Filepath == filepath].Category.to_numpy()[0]
+                if cat != last_cat:
+                    print('---------------------------------')
+                    print(f'{cat.title()}')
+                n = 0
+                if group != last_group:
+                    print(f"└── {group.title()}")
+                n = 4
+                if subgroup != last_subgroup:
+                    print(f"{n*' '}└── {subgroup.title()}")
+                n += 4
+                if species != last_species:
+                    print(f"{n*' '}└── {species.title()}")
+                n += 4
                 if not self.allow_out_of_bounds:
                     has_nan = np.isnan(np.sum(new_entry[cfg.WVLS].to_numpy()))
                     if has_nan:
-                        print(f'{cat.title()}: {data_id} ({species.title()}) does not span wavelength range, removing...')
+                        print(f"{n*' '}└── {data_id} does not span wavelength range, removing...")
                         main_df.drop(
                             main_df[main_df.Filepath == filepath].index,
                             inplace=True)
                     else:
-                        print(f'{cat.title()}: {data_id} ({species.title()}) loaded')
+                        print(f"{n*' '}└── {data_id} loaded")
                         main_df.loc[main_df.Filepath == filepath,
                                         new_entry.columns] = new_entry.values
                 else:
-                    print(f'{cat.title()}: {data_id} ({species.title()}) loaded')
+                    print(f"{n*' '}└── {data_id} loaded")
                     main_df.loc[main_df.Filepath == filepath,
                                     new_entry.columns] = new_entry.values
+                last_cat = cat
+                last_group = group
+                last_subgroup = subgroup
+                last_species = species
         # add the group, subgroup, species to the main_df
         # put the Data ID as the index
         main_df.set_index('Data ID', inplace=True)

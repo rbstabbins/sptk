@@ -273,6 +273,10 @@ class MaterialCollection():
         last_subgroup = None
         last_species = None
         with click.progressbar(filepaths) as load_bar:
+            print('---------------------------------')
+            print('Category')
+            print("└──species|subgroup|group|")
+            print("   └──data_id status")
             for filepath in load_bar:  # for each file, load_material
                 new_entry = MaterialCollection.load_material(filepath)
                 # extract data id, species, subgroup, group and library
@@ -298,29 +302,21 @@ class MaterialCollection():
                 if cat != last_cat:
                     print('---------------------------------')
                     print(f'{cat.title()}')
-                n = 0
-                if group != last_group:
-                    print(f"└── {group.title()}")
-                n = 4
-                if subgroup != last_subgroup:
-                    print(f"{n*' '}└── {subgroup.title()}")
-                n += 4
                 if species != last_species:
-                    print(f"{n*' '}└── {species.title()}")
-                n += 4
+                    print(f"└──-{species}|{subgroup}|{group}|")
                 if not self.allow_out_of_bounds:
                     has_nan = np.isnan(np.sum(new_entry[cfg.WVLS].to_numpy()))
                     if has_nan:
-                        print(f"{n*' '}└── {data_id} does not span wavelength range, removing...")
+                        print(f"   └──-{data_id} does not span wavelength range, removing...")
                         main_df.drop(
                             main_df[main_df.Filepath == filepath].index,
                             inplace=True)
                     else:
-                        print(f"{n*' '}└── {data_id} loaded")
+                        print(f"   └──-{data_id} loaded")
                         main_df.loc[main_df.Filepath == filepath,
                                         new_entry.columns] = new_entry.values
                 else:
-                    print(f"{n*' '}└── {data_id} loaded")
+                    print(f"   └──-{data_id} loaded")
                     main_df.loc[main_df.Filepath == filepath,
                                     new_entry.columns] = new_entry.values
                 last_cat = cat
@@ -965,6 +961,7 @@ class MaterialCollection():
 
     def plot_profiles(self, 
                     stacked: bool=False,
+                    spectrogram: bool=False,
                     scope: str='all', 
                     groupby: str='Category',
                     pad_factor: float=1/6, # adjust the padding factor for the plot
@@ -974,12 +971,20 @@ class MaterialCollection():
         """
         plotter = SpectralLibraryAnalyser(self)
         axes = plotter.plot_profiles(
-                        stacked=stacked,
                         scope=scope,
                         groupby=groupby,
-                        pad_factor=pad_factor,
-                        ci=ci
+                        stacked=stacked,
+                        spectrogram=spectrogram,
+                        pad_factor=pad_factor
                         )
+        return axes
+    
+    def plot_spectrogram(self,
+                         continuum_removed: bool=False) -> plt.Axes:
+        """Plot the spectrogram of the materials
+        """
+        plotter = SpectralLibraryAnalyser(self)
+        axes = plotter.plot_spectrogram(continuum_removed=continuum_removed)
         return axes
     
     def render_colour(self, 

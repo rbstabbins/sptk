@@ -108,6 +108,7 @@ class MaterialCollection():
         self.header_list = HEADER_LIST
 
         self.noisy = False # generally not used for a Material Collection
+        self.continuum_removed = False
 
         # find the existing pickle file of the MaterialCollection DataFrame,
         # or make a new one from the material file dictionary
@@ -960,10 +961,10 @@ class MaterialCollection():
 
 
     def plot_profiles(self, 
-                    stacked: bool=False,
-                    spectrogram: bool=False,
                     scope: str='all', 
                     groupby: str='Category',
+                    stacked: bool=False,
+                    waterfall: bool=False,
                     pad_factor: float=1/6, # adjust the padding factor for the plot
                     ci: bool=False
                     ) -> plt.Axes:
@@ -971,21 +972,21 @@ class MaterialCollection():
         """
         plotter = SpectralLibraryAnalyser(self)
         axes = plotter.plot_profiles(
-                        scope=scope,
-                        groupby=groupby,
-                        stacked=stacked,
-                        spectrogram=spectrogram,
-                        pad_factor=pad_factor
-                        )
+                                scope=scope,
+                                groupby=groupby,
+                                stacked=stacked,
+                                waterfall=waterfall,
+                                pad_factor=pad_factor
+                                )
         return axes
     
-    def plot_spectrogram(self,
-                         continuum_removed: bool=False) -> plt.Axes:
-        """Plot the spectrogram of the materials
-        """
-        plotter = SpectralLibraryAnalyser(self)
-        axes = plotter.plot_spectrogram(continuum_removed=continuum_removed)
-        return axes
+    # def plot_waterfall(self,
+    #                      continuum_removed: bool=False) -> plt.Axes:
+    #     """Plot the waterfall of the materials
+    #     """
+    #     plotter = SpectralLibraryAnalyser(self)
+    #     axes = plotter.plot_spectrogram(continuum_removed=continuum_removed)
+    #     return axes
     
     def render_colour(self, 
             illuminant: Literal['D65', 'A', 'C', 'D50', 'D55', 'D75']='D65'

@@ -22,6 +22,7 @@ import matplotlib.ticker as ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import seaborn as sns
+import scipy.interpolate as interpolate
 import pysptools.spectro as spectro
 import sptk.config as cfg
 
@@ -264,16 +265,15 @@ class SpectralLibraryAnalyser():
             data_df: pd.DataFrame,
             ax: plt.Axes,
             scope: Literal[
-                'all', # all data
-                'Libraries', # 1 subplot for each library
-                'Categories', # 1 subplot for each category
-                'Groups', # 1 subplot for each group
-                'Subgroups', # 1 subplot for each subgroup
-                'Species', # 1 subplot for each species
-                'Sample IDs', # 1 subplot for each sample
-                'Data IDs', # 1 subplot for each data ID
-                str # 1 subplot for a specific category, group, subgroup, species, or sample
-                ]='all',         
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',        
             groupby: Literal[
                 'Library', # hue/style by library
                 'Category', # hue/style by category
@@ -323,6 +323,10 @@ class SpectralLibraryAnalyser():
 
         if stacked:
             filename = filename + '_stacked'
+
+        if self.spectra_obj.continuum_removed:
+            title = title + '\n Continuum Removed'
+            filename = filename + '_continuum_removed'
 
         if self.spectra_obj.noisy:
             with_noise = True
@@ -389,8 +393,8 @@ class SpectralLibraryAnalyser():
 
         # format axes
         # set axes limits according to spectarl object spectral range
-        ax.set_xlim(self.spectra_obj.wvls[0]-10, self.spectra_obj.wvls[-1]+10)
-        # ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
+        # ax.set_xlim(self.spectra_obj.wvls[0]-10, self.spectra_obj.wvls[-1]+10)
+        ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
         ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         if stacked:
             
@@ -530,20 +534,19 @@ class SpectralLibraryAnalyser():
 
         return ax
 
-    def render_spectrogram(self,
+    def render_waterfall(self,
             data_df: pd.DataFrame,
             ax: plt.Axes,
             scope: Literal[
-                'all', # all data
-                'Libraries', # 1 subplot for each library
-                'Categories', # 1 subplot for each category
-                'Groups', # 1 subplot for each group
-                'Subgroups', # 1 subplot for each subgroup
-                'Species', # 1 subplot for each species
-                'Sample IDs', # 1 subplot for each sample
-                'Data IDs', # 1 subplot for each data ID
-                str # 1 subplot for a specific category, group, subgroup, species, or sample
-                ]='all',         
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',        
             groupby: Literal[
                 'Library', # hue/style by library
                 'Category', # hue/style by category
@@ -588,6 +591,13 @@ class SpectralLibraryAnalyser():
             title = scope.title()
             filename = f'{scope}_by_{groupby.lower()}'
 
+        if self.spectra_obj.continuum_removed:
+            title = title + '\n Continuum Removed'
+            filename = filename + '_continuum_removed'
+            colorbar_label = 'Band Depth'
+        else:
+            colorbar_label = 'Reflectance'
+
         if self.spectra_obj.noisy:
             with_noise = True
             title = title + ' with Noise'
@@ -610,6 +620,9 @@ class SpectralLibraryAnalyser():
         else:
             data = data_df.loc[:, self.spectra_obj.wvls].to_numpy()
 
+        if self.spectra_obj.continuum_removed:
+            data = 1.0 - data
+
         # set plot properties
         hue_flag = groupby
 
@@ -631,33 +644,45 @@ class SpectralLibraryAnalyser():
             errobar = None
             estimator=None
         
+        # get number of noisy samples
+        if with_noise:
+            eg_root_data_id = data_df['Root Data ID'].unique()[0]
+            n_spacers = data_df[data_df['Root Data ID'] == eg_root_data_id].shape[0]
+        else:
+            n_spacers = 1
+            
         # get locations of each groupby label
         groupby_ticks = []
         groupby_label_y = {}
         for g, grouping in enumerate(data_df[groupby].unique()):
-            hi = max(data_df[data_df[groupby] == grouping].index) + g + 1
-            # insert a row of NaNs to separate the groups
-            data = np.insert(data, hi, np.nan, axis=0)
+            hi = max(data_df[data_df[groupby] == grouping].index) + g*n_spacers + 1
+            # insert n_spacers rows of NaNs to separate the groups
+            spacers = np.full((n_spacers, data.shape[1]), np.nan)
+            data = np.insert(data, hi, spacers, axis=0)
             groupby_label_y[grouping] = hi
             groupby_ticks.append(hi)
 
-        # get locations of each Data ID
+        # get locations of each Data ID or Root Data ID
         id_ticks = []
-        ids = data_df['Data ID'].unique()
+        if with_noise:
+            id_tag = 'Root Data ID'
+        else:   
+            id_tag = 'Data ID'
+        ids = data_df[id_tag].unique()
         id_label_y = {}
         id_bounds = {}
         for id in ids:
-            lo = min(data_df[data_df['Data ID'] == id].index)
-            hi = max(data_df[data_df['Data ID'] == id].index)
-            grouping = data_df[data_df['Data ID'] == id][groupby].iloc[0]
+            lo = min(data_df[data_df[id_tag] == id].index)
+            hi = max(data_df[data_df[id_tag] == id].index) + 1
+            grouping = data_df[data_df[id_tag] == id][groupby].iloc[0]
             grouping_n = list(data_df[groupby].unique()).index(grouping)
-            lo = lo + grouping_n
-            hi = hi + grouping_n
+            lo = lo + grouping_n * n_spacers
+            hi = hi + grouping_n * n_spacers
             id_bounds[id] = [lo, hi]
             id_label_y[id] = np.mean([lo, hi])
             id_ticks.append(lo)
 
-        # set plot limits
+        # set plot limits        
         wvl_lo = self.spectra_obj.wvls[0]
         wvl_hi = self.spectra_obj.wvls[-1]
         # set up a good figure size so that good # of samples are shown per cm.
@@ -671,6 +696,24 @@ class SpectralLibraryAnalyser():
         cmap = plt.get_cmap('viridis')
         cmap.set_bad('black')
 
+        # convert data from arbitrary gridding of the spectra to a regular grid
+        # this moves the arbitrarily spaced channels of the given Instrument
+        # to the regular gridding of the simulation - usually 1 nm.
+        # get the number of samples
+        if self.obj_type == 'observation':            
+            n_lines = len(data)
+            lines = np.arange(0, n_lines, 1)
+            # create a regular grid
+            wvls_out = np.arange(wvl_lo, wvl_hi, cfg.SAMPLE_RES['delta_wvl'])
+            # create an out meshgrid
+            wvls_out, lines_out = np.meshgrid(wvls_out, lines)
+            # use regular interpolator to make use of rectilinear grid. i.e don't
+            # interpolate across samples, only across wavelengths
+            interp = interpolate.RegularGridInterpolator(
+                (lines, self.spectra_obj.wvls),
+                data)
+            data = interp((lines_out, wvls_out))
+
         # draw plot
         im = ax.imshow(
                 data,
@@ -679,6 +722,9 @@ class SpectralLibraryAnalyser():
                 interpolation='nearest',
                 origin='lower',
                 cmap=cmap)
+        
+        wvl_lo = cfg.SAMPLE_RES['wvl_min']-10
+        wvl_hi = cfg.SAMPLE_RES['wvl_max']+10
 
         # add Species labels
         for id in ids:
@@ -696,7 +742,7 @@ class SpectralLibraryAnalyser():
                 fontsize=cfg.LEGEND_S,
                 rotation=0,
                 ha='left',
-                va='bottom',
+                va='center',
                 annotation_clip=False)
 
         # add category labels
@@ -716,8 +762,10 @@ class SpectralLibraryAnalyser():
 
         # format axes
         # set axes limits according to spectarl object spectral range
-        ax.set_xlim(self.spectra_obj.wvls[0]-10, self.spectra_obj.wvls[-1]+10)
-        # ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
+        # ax.set_xlim(self.spectra_obj.wvls[0]-10, self.spectra_obj.wvls[-1]+10)
+        ax.set_xlim(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10)
+        #set background of the axes plot area to be black, not white
+        ax.set_facecolor('black')    
         ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         ax.set_ylabel('', fontsize=cfg.LABEL_S)
 
@@ -744,16 +792,16 @@ class SpectralLibraryAnalyser():
         # set top ticks to be both major and minor
         # ax.tick_params(which='both', axis='x', bottom=True, top=True)
         # ax.grid(which='minor', axis='y', lw=0.5)
-        # ax.set_yticks(id_ticks, minor=False)
+        ax.set_yticks(id_ticks, minor=False)
         # ax.tick_params(right=True)
         ax.set_yticklabels([])
-        # ax.grid(which='major', axis='y', lw=0.8, color='w')
+        # ax.grid(which='major', axis='y', lw=0.5, color='w')
         # ax.tick_params(right=True)
 
         # add colourbar
         divider = make_axes_locatable(ax)
 
-# get font ehight in y-axis data units
+        # get font height in y-axis data units
         font_height_inches = (cfg.LEGEND_S) / 72
         cax = divider.new_vertical(size=font_height_inches, pack_start = True)
         # get the figure
@@ -761,7 +809,11 @@ class SpectralLibraryAnalyser():
         fig.add_axes(cax)
 
         cbar = plt.colorbar(im, cax = cax, orientation='horizontal')        
-        cbar.set_label('Reflectance', fontsize=cfg.LABEL_S)
+        # move label to right of colorbar
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.set_label(colorbar_label, fontsize=cfg.LEGEND_S, ha='left', x=0, y=0)
+        # set ticks to point inward
+        cbar.ax.tick_params(direction='in')
         for tick in cbar.ax.get_xticklabels():
             tick.set_fontname("Arial")
             tick.set_fontsize(cfg.LEGEND_S)
@@ -884,8 +936,8 @@ class SpectralLibraryAnalyser():
                 'Sample ID', # hue/style by Sample ID
                 'Data ID' # hue/style by Data ID
                 ]='Category',
-            spectrogram: bool=False, 
             stacked: bool=False,
+            waterfall: bool=False,
             pad_factor: float=1/6,
             ci: bool=False,
             hires_under: bool=False,
@@ -914,6 +966,11 @@ class SpectralLibraryAnalyser():
         else:
             with_noise = False
 
+        if self.spectra_obj.continuum_removed:
+            continuum_removed = True
+        else:
+            continuum_removed = False
+
         # Plot the entire material collection in one figure
         if scope == 'all':
 
@@ -933,8 +990,8 @@ class SpectralLibraryAnalyser():
             # update to write figure here
             fig, ax = self.setup_plot(all_df, groupby, stacked)
 
-            if spectrogram:
-                ax = self.render_spectrogram(
+            if waterfall:
+                ax = self.render_waterfall(
                             all_df,
                             ax,
                             scope=scope,
@@ -952,7 +1009,7 @@ class SpectralLibraryAnalyser():
                             ci=ci)
             ax = [ax]
             
-            fig, ax = self.export_plot(fig, ax, scope, groupby, stacked, with_noise, out_dir)
+            fig, ax = self.export_plot(fig, ax, scope, groupby, stacked, waterfall, continuum_removed, with_noise, out_dir)
 
             if cfg.TIME_IT:
                 toc = time.perf_counter()
@@ -1019,19 +1076,9 @@ class SpectralLibraryAnalyser():
                     groupby, 
                     stacked, 
                     subfig=subfigs[sf][row_n][col_n])
-                
-                # ax = self.render_profile_plot(
-                #             scope_df,
-                #             ax,
-                #             scope=this_scope,
-                #             groupby=groupby,
-                #             stacked=stacked,
-                #             pad_factor=pad_factor,
-                #             hires_under=hires_under,
-                #             ci=ci)
-                
-                if spectrogram:
-                    ax = self.render_spectrogram(
+                                
+                if waterfall:
+                    ax = self.render_waterfall(
                                 scope_df,
                                 ax,
                                 scope=this_scope,
@@ -1048,7 +1095,6 @@ class SpectralLibraryAnalyser():
                                 hires_under=hires_under,
                                 ci=ci)
 
-
                 # add letter to the ax title. If letter is >Z, then wrap arround and use AA, AB, etc.
                 if s < 26:
                     subtitle_char = chr(65 + s)
@@ -1064,7 +1110,7 @@ class SpectralLibraryAnalyser():
                     index = f'({f+1}/{len(figs)})'
                 else:
                     index=None
-                fig, axes = self.export_plot(fig, axes, scope, groupby, stacked, with_noise, index, out_dir)
+                fig, axes = self.export_plot(fig, axes, scope, groupby, stacked, waterfall, continuum_removed, with_noise, index, out_dir)
             
             # show the subfigure
             plt.show()
@@ -1116,7 +1162,7 @@ class SpectralLibraryAnalyser():
 
             ax = [ax]
             
-            fig, ax = self.export_plot(fig, ax, scope, groupby, stacked, with_noise, out_dir)
+            fig, ax = self.export_plot(fig, ax, scope, groupby, stacked, waterfall, continuum_removed, with_noise, out_dir)
 
             if cfg.TIME_IT:
                 toc = time.perf_counter()
@@ -1130,6 +1176,8 @@ class SpectralLibraryAnalyser():
                 scope,
                 groupby: str, 
                 stacked: bool=False, 
+                waterfall: bool=False,
+                continuum_removed: bool=False,
                 with_noise: bool=False, 
                 index: str=None, # for saving multiple plots
                 out_dir: Union[bool, str]=False) -> Tuple[plt.figure, plt.Axes]:
@@ -1164,14 +1212,27 @@ class SpectralLibraryAnalyser():
 
         # set figure filename and title
         if scope == 'all':
-            filename = f'all_entries_by_{groupby.lower()}_profile_plot'
+            #get title from figure
+            title = axes[0].title.get_text()
+            filename = f'all_entries_by_{groupby.lower()}'
         else:
             title = scope.title() + ' grouped by ' + groupby.title()
             filename = f'{scope}_by_{groupby.lower()}'
 
+        if waterfall:
+            filename = filename + '_waterfall'
+        else:
+            filename = filename + '_profile_plot'
+
         if stacked:
             filename = filename + '_stacked'
+
+        if continuum_removed:
+            title = title + '\n Continuum Removed'
+            filename = filename + '_continuum_removed'
+
         if with_noise: # worry about this for observations
+            title = title + ' with Noise'
             filename = filename + '_with_noise'
 
         if self.obj_type == 'observation':
@@ -1202,7 +1263,7 @@ class SpectralLibraryAnalyser():
         return fig, axes
 
     # """
-    # Spectrogram Visualisation & Continuum Removal
+    # waterfall Visualisation & Continuum Removal
     # """
 
     def remove_continuum(self, plot: bool=False):
@@ -1212,8 +1273,8 @@ class SpectralLibraryAnalyser():
         self.spectra_obj_cr = copy.deepcopy(self.spectra_obj)
         cat_s = self.spectra_obj_cr.get_cat_df()
         spectra = self.spectra_obj_cr.get_refl_df()
-        self.spectra_obj_cr.object_dir = Path(
-                                self.project_dir,'continuum_removed')
+        # self.spectra_obj_cr.object_dir = Path(
+        #                         self.project_dir,'continuum_removed') # don't change the object dir
         for index, spectrum in spectra.iterrows():
             # remove NaNs prior to analysis
             notnans = spectrum[~spectrum.isna()].index
@@ -1240,171 +1301,172 @@ class SpectralLibraryAnalyser():
         # rewrite spectra_obj object with continuum removed spectra
         data = spectra.reset_index()
         self.spectra_obj_cr.set_refl_data(data)
+        self.spectra_obj_cr.continuum_removed = True
         return self.spectra_obj_cr
 
-    def plot_spectrogram(self, 
-                        scope: Literal[
-                                'all', # all data
-                                'Libraries', # 1 subplot for each library
-                                'Categories', # 1 subplot for each category
-                                'Groups', # 1 subplot for each group
-                                'Subgroups', # 1 subplot for each subgroup
-                                'Species', # 1 subplot for each species
-                                'Sample IDs', # 1 subplot for each sample
-                                'Data IDs', # 1 subplot for each data ID
-                                str # 1 subplot for a specific category, group, subgroup, species, or sample
-                            ]='all',
-                        groupby: Literal[
-                                'Library', # hue/style by library
-                                'Category', # hue/style by category
-                                'Group', # hue/style by group
-                                'Subgroup', # hue/style by subgroup
-                                'Species', # hue/style by species
-                                'Sample ID', # hue/style by Sample ID
-                                'Data ID' # hue/style by Data ID
-                            ]='Category',
-                        continuum_removed: bool=False) -> plt.Axes:
-        """Display the reflectance data in 2D density plots, with colour giving
-        absorption depth.
+    # def plot_waterfall(self, 
+    #                     scope: Literal[
+    #                             'all', # all data
+    #                             'Libraries', # 1 subplot for each library
+    #                             'Categories', # 1 subplot for each category
+    #                             'Groups', # 1 subplot for each group
+    #                             'Subgroups', # 1 subplot for each subgroup
+    #                             'Species', # 1 subplot for each species
+    #                             'Sample IDs', # 1 subplot for each sample
+    #                             'Data IDs', # 1 subplot for each data ID
+    #                             str # 1 subplot for a specific category, group, subgroup, species, or sample
+    #                         ]='all',
+    #                     groupby: Literal[
+    #                             'Library', # hue/style by library
+    #                             'Category', # hue/style by category
+    #                             'Group', # hue/style by group
+    #                             'Subgroup', # hue/style by subgroup
+    #                             'Species', # hue/style by species
+    #                             'Sample ID', # hue/style by Sample ID
+    #                             'Data ID' # hue/style by Data ID
+    #                         ]='Category',
+    #                     continuum_removed: bool=False) -> plt.Axes:
+    #     """Display the reflectance data in 2D density plots, with colour giving
+    #     absorption depth.
 
-        :param continuum_removed: indicate to use continuum_removed data,
-                defaults to True
-        :type continuum_removed: bool, optional
-        """
+    #     :param continuum_removed: indicate to use continuum_removed data,
+    #             defaults to True
+    #     :type continuum_removed: bool, optional
+    #     """
 
-        # get data
+    #     # get data
         
 
-        if continuum_removed:
-            try:
-                vis_df = self.spectra_obj_cr.main_df
-            except AttributeError:
-                self.remove_continuum()
-                vis_df = self.spectra_obj_cr.main_df
-        else:
-            vis_df = self.spectra_obj.main_df
-        vis_df.sort_values(by=['Category', 'Species', 'Sample ID'],
-                                            inplace=True, ignore_index = True)
+    #     if continuum_removed:
+    #         try:
+    #             vis_df = self.spectra_obj_cr.main_df
+    #         except AttributeError:
+    #             self.remove_continuum()
+    #             vis_df = self.spectra_obj_cr.main_df
+    #     else:
+    #         vis_df = self.spectra_obj.main_df
+    #     vis_df.sort_values(by=['Category', 'Species', 'Sample ID'],
+    #                                         inplace=True, ignore_index = True)
 
-        if self.obj_type == 'material_collection':
-            title = 'High-Resolution Spectral Library'
-            data = vis_df[self.wvls].to_numpy() - 1.0
-        elif self.obj_type == 'observation':
-            title=f'{self.spectra_obj.instrument.name} sampled Spectral Library'
-            data = self.spectra_obj_cr.resample_wavelengths() - 1.0
-        else:
-            raise ValueError("spectral object type not recognised")
+    #     if self.obj_type == 'material_collection':
+    #         title = 'High-Resolution Spectral Library'
+    #         data = vis_df[self.wvls].to_numpy() - 1.0
+    #     elif self.obj_type == 'observation':
+    #         title=f'{self.spectra_obj.instrument.name} sampled Spectral Library'
+    #         data = self.spectra_obj_cr.resample_wavelengths() - 1.0
+    #     else:
+    #         raise ValueError("spectral object type not recognised")
 
-        # get locations of each category
-        cat_ticks = []
-        cat_label_y = {}
-        cat_bounds = {}
-        for cat in self.spectra_obj.categories:
-            cat_lo = min(vis_df[vis_df.Category == cat].index)
-            cat_hi = max(vis_df[vis_df.Category == cat].index)
-            cat_bounds[cat] = [cat_lo, cat_hi]
-            cat_label_y[cat] = np.mean([cat_lo, cat_hi]) + 1
-            cat_ticks.append(cat_lo)
+    #     # get locations of each category
+    #     cat_ticks = []
+    #     cat_label_y = {}
+    #     cat_bounds = {}
+    #     for cat in self.spectra_obj.categories:
+    #         cat_lo = min(vis_df[vis_df.Category == cat].index)
+    #         cat_hi = max(vis_df[vis_df.Category == cat].index)
+    #         cat_bounds[cat] = [cat_lo, cat_hi]
+    #         cat_label_y[cat] = np.mean([cat_lo, cat_hi]) + 1
+    #         cat_ticks.append(cat_lo)
 
-        # get locations of each Species
-        min_ticks = []
-        mineral_names = vis_df['Species'].unique()
-        mineral_label_y = {}
-        mineral_bounds = {}
-        for mineral_name in mineral_names:
-            min_lo = min(vis_df[vis_df['Species'] == mineral_name].index)
-            min_hi = max(vis_df[vis_df['Species'] == mineral_name].index)
-            mineral_bounds[mineral_name] = [min_lo, min_hi]
-            mineral_label_y[mineral_name] = np.mean([min_lo, min_hi])
-            min_ticks.append(min_lo)
+    #     # get locations of each Species
+    #     min_ticks = []
+    #     mineral_names = vis_df['Species'].unique()
+    #     mineral_label_y = {}
+    #     mineral_bounds = {}
+    #     for mineral_name in mineral_names:
+    #         min_lo = min(vis_df[vis_df['Species'] == mineral_name].index)
+    #         min_hi = max(vis_df[vis_df['Species'] == mineral_name].index)
+    #         mineral_bounds[mineral_name] = [min_lo, min_hi]
+    #         mineral_label_y[mineral_name] = np.mean([min_lo, min_hi])
+    #         min_ticks.append(min_lo)
 
-        # set plot limits
-        wvl_lo = cfg.SAMPLE_RES['wvl_min']
-        wvl_hi = cfg.SAMPLE_RES['wvl_max']
-        # set up a good figure size so that good # of samples are shown per cm.
-        # A4 = 210 x 297 mm
-        # minus 3 cm for border
-        # fig size - width = 190 mm
-        # fig size - height = 2mm * #samples
-        height = 0.2*len(data)
-        if height < 15:
-            height = 15 # limit the minimum height to 15 cm
-        fig, ax = plt.subplots(figsize=[15*cfg.CM, height*cfg.CM], dpi=cfg.DPI)
-        cmap = plt.get_cmap('viridis_r')
-        cmap.set_bad('black')
+    #     # set plot limits
+    #     wvl_lo = cfg.SAMPLE_RES['wvl_min']
+    #     wvl_hi = cfg.SAMPLE_RES['wvl_max']
+    #     # set up a good figure size so that good # of samples are shown per cm.
+    #     # A4 = 210 x 297 mm
+    #     # minus 3 cm for border
+    #     # fig size - width = 190 mm
+    #     # fig size - height = 2mm * #samples
+    #     height = 0.2*len(data)
+    #     if height < 15:
+    #         height = 15 # limit the minimum height to 15 cm
+    #     fig, ax = plt.subplots(figsize=[15*cfg.CM, height*cfg.CM], dpi=cfg.DPI)
+    #     cmap = plt.get_cmap('viridis_r')
+    #     cmap.set_bad('black')
 
-        # draw plot
-        im = ax.imshow(
-                data,
-                aspect='auto',
-                extent=[wvl_lo, wvl_hi, 0, len(data)],
-                interpolation='nearest',
-                origin='lower',
-                cmap=cmap, vmin=-1.0, vmax=0.0)
-        ax.set_xlabel('Wavelength (nm)')
-        ax.set_title(title)
+    #     # draw plot
+    #     im = ax.imshow(
+    #             data,
+    #             aspect='auto',
+    #             extent=[wvl_lo, wvl_hi, 0, len(data)],
+    #             interpolation='nearest',
+    #             origin='lower',
+    #             cmap=cmap, vmin=-1.0, vmax=0.0)
+    #     ax.set_xlabel('Wavelength (nm)')
+    #     ax.set_title(title)
 
-        # add Species labels
-        for mineral_name in mineral_names:
-            ax.annotate(
-                '',
-                xy=(wvl_hi + 50, mineral_bounds[mineral_name][0]),
-                xytext=(wvl_hi + 50, mineral_bounds[mineral_name][1]+1),
-                arrowprops=dict(arrowstyle='<|-|>', shrinkA=0, shrinkB=0),
-                annotation_clip=False)
-            ax.annotate(
-                mineral_name,
-                xy=(wvl_hi + 70,mineral_label_y[mineral_name]),
-                xytext=(wvl_hi + 70,mineral_label_y[mineral_name]),
-                rotation=45,
-                ha='left',
-                va='bottom',
-                annotation_clip=False)
+    #     # add Species labels
+    #     for mineral_name in mineral_names:
+    #         ax.annotate(
+    #             '',
+    #             xy=(wvl_hi + 50, mineral_bounds[mineral_name][0]),
+    #             xytext=(wvl_hi + 50, mineral_bounds[mineral_name][1]+1),
+    #             arrowprops=dict(arrowstyle='<|-|>', shrinkA=0, shrinkB=0),
+    #             annotation_clip=False)
+    #         ax.annotate(
+    #             mineral_name,
+    #             xy=(wvl_hi + 70,mineral_label_y[mineral_name]),
+    #             xytext=(wvl_hi + 70,mineral_label_y[mineral_name]),
+    #             rotation=45,
+    #             ha='left',
+    #             va='bottom',
+    #             annotation_clip=False)
 
-        # add category labels
-        for cat in self.spectra_obj.categories:
-            ax.annotate(
-                '',
-                xy=(wvl_lo - 50, cat_bounds[cat][0]),
-                xytext=(wvl_lo - 50, cat_bounds[cat][1]+1),
-                arrowprops=dict(arrowstyle='<|-|>', shrinkA=0, shrinkB=0),
-                annotation_clip=False)
-            ax.annotate(
-                cat,
-                xy=(wvl_lo - 70,cat_label_y[cat]),
-                xytext=(wvl_lo - 70,cat_label_y[cat]),
-                rotation=45,
-                ha='right',
-                va='top',
-                annotation_clip=False)
+    #     # add category labels
+    #     for cat in self.spectra_obj.categories:
+    #         ax.annotate(
+    #             '',
+    #             xy=(wvl_lo - 50, cat_bounds[cat][0]),
+    #             xytext=(wvl_lo - 50, cat_bounds[cat][1]+1),
+    #             arrowprops=dict(arrowstyle='<|-|>', shrinkA=0, shrinkB=0),
+    #             annotation_clip=False)
+    #         ax.annotate(
+    #             cat,
+    #             xy=(wvl_lo - 70,cat_label_y[cat]),
+    #             xytext=(wvl_lo - 70,cat_label_y[cat]),
+    #             rotation=45,
+    #             ha='right',
+    #             va='top',
+    #             annotation_clip=False)
 
-        # set ticks
-        minor_ticks = np.arange(0, len(data)+1, 1)
-        ax.set_yticks(minor_ticks, minor=True)
-        ax.grid(which='minor', axis='y', lw=0.5)
-        ax.set_yticks(min_ticks, minor=False)
-        ax.tick_params(right=True)
-        ax.set_yticklabels([])
-        ax.grid(which='major', axis='y', lw=0.8, color='w')
-        ax.tick_params(right=True)
+    #     # set ticks
+    #     minor_ticks = np.arange(0, len(data)+1, 1)
+    #     ax.set_yticks(minor_ticks, minor=True)
+    #     ax.grid(which='minor', axis='y', lw=0.5)
+    #     ax.set_yticks(min_ticks, minor=False)
+    #     ax.tick_params(right=True)
+    #     ax.set_yticklabels([])
+    #     ax.grid(which='major', axis='y', lw=0.8, color='w')
+    #     ax.tick_params(right=True)
 
-        divider = make_axes_locatable(ax)
-        cax = divider.new_vertical(size=0.5*cfg.CM, pad=0.6, pack_start = True)
-        fig.add_axes(cax)
+    #     divider = make_axes_locatable(ax)
+    #     cax = divider.new_vertical(size=0.5*cfg.CM, pad=0.6, pack_start = True)
+    #     fig.add_axes(cax)
 
-        cbar = plt.colorbar(im, cax = cax, orientation='horizontal', shrink=0.5)
-        cbar.set_label('Band Depth')
+    #     cbar = plt.colorbar(im, cax = cax, orientation='horizontal', shrink=0.5)
+    #     cbar.set_label('Band Depth')
 
-        fig.tight_layout()
+    #     fig.tight_layout()
 
-        # export
-        plt.rcParams['svg.fonttype'] = 'none'
-        filepath=Path(self.project_dir,'spectrogram').with_suffix('.svg')
-        fig.savefig(filepath, bbox_inches='tight', pad_inches = 0.1, format='svg')
+    #     # export
+    #     plt.rcParams['svg.fonttype'] = 'none'
+    #     filepath=Path(self.project_dir,'waterfall').with_suffix('.svg')
+    #     fig.savefig(filepath, bbox_inches='tight', pad_inches = 0.1, format='svg')
 
-        plt.show()
+    #     plt.show()
 
-        return fig, ax
+    #     return fig, ax
 
     def analyse_bands(self):
         """Find the centre-wavelengths, fwhms, depths and areas of distinct

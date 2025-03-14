@@ -941,9 +941,10 @@ class Observation():
         print('Observation export complete.')
 
     def plot_profiles(self, 
-                    stacked: bool=False,
                     scope: str='all', 
                     groupby: str='Category',
+                    stacked: bool=False,
+                    waterfall: bool=False,
                     pad_factor: float=1/6,
                     ci: bool=False,
                     hires_under: bool=False,
@@ -952,9 +953,10 @@ class Observation():
         """
         plotter = SpectralLibraryAnalyser(self)
         axes = plotter.plot_profiles(
-                        stacked=stacked,
                         scope=scope,
                         groupby=groupby,
+                        stacked=stacked,
+                        waterfall=waterfall,
                         pad_factor=pad_factor,
                         ci=ci,
                         hires_under=hires_under)

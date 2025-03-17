@@ -78,6 +78,8 @@ class Instrument():
 
         self.filter_ids = self.main_df.index.to_list()
 
+        self.filter_cols = self.set_filter_cols()
+
         if cfg.TIME_IT:
             toc = time.perf_counter()
             print(f"Instrument built in {toc - tic:0.4f} seconds.")
@@ -218,7 +220,9 @@ class Instrument():
         return cauchy.transpose()
 
     @staticmethod
-    def build_instrument_df(inst_df: pd.DataFrame, shape: str='gauss') -> pd.DataFrame:
+    def build_instrument_df(
+            inst_df: pd.DataFrame, 
+            shape: str='gauss') -> pd.DataFrame:
         """Builds instrument transmission profiles for filter cwls and fwhms
         using a Gaussian function, and returns in a DataFrame.
 
@@ -253,7 +257,8 @@ class Instrument():
             trans_in = inst_df.to_numpy().astype('float64')
             trans_func = interp1d(wvls_in, trans_in.T, bounds_error=False)
             out = trans_func(cfg.WVLS)
-            # TODO check that the input wavelengths match or exceed the simulation wavelengths, and deal with it if not.
+            # TODO check that the input wavelengths match or exceed the 
+            # simulation wavelengths, and deal with it if not.
             # Quick fix - set all NaN values to 0
             out = np.where(np.isnan(out), 0, out)
             
@@ -295,7 +300,52 @@ class Instrument():
                     left_index=True,
                     right_index=True,
                     how='outer')
+        
+        # set order by cwl
+        main_df = main_df.sort_values(by='cwl')
+
         return main_df
+
+    def set_filter_cols(self) -> pd.Series:
+        """Set the filter colours of the instrument
+
+        :return: filter colours
+        :rtype: Series
+        """
+        
+        # if not a spectrometer, get filter colours
+        if self.filter_ids[0][0] != 'S':
+            # set colours for the filters        
+            norm_trans = self.get_trans_df().T
+            sds = colour.MultiSpectralDistributions(norm_trans)    
+            # normalise the spds
+            # sds = sds / np.sum(sds, axis=1)[:,None]
+                
+            illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
+            xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1.0)/100 # convert to XYZ space
+            # xyz = xyz / np.sum(xyz, axis=1)[:,None]
+            # xyz = xyz.clip(0,100) # clip to 0-1 range
+            rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB    
+            rgb = rgb.clip(0,1) # clip to 0-1 range
+                
+            # if np.any(rgb < 0):
+            #     # We're not in the RGB gamut: approximate by desaturating
+            #     w = - np.min(rgb, axis=0)
+            #     rgb = rgb + w
+            if not np.all(rgb==0):
+                # Normalize the rgb vector
+                rgb /= np.max(rgb)
+
+            # just do central wavelength to XYZ
+            # xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
+            # colour.plotting.plot_single_sd(sds[:,0])
+            
+            # make df of colours
+            col_df = pd.DataFrame(rgb, columns=['r','g','b'], index=self.filter_ids)
+        else:
+            cwl_colours = 'husl'
+
+        return col_df
 
     def get_trans_df(self) -> pd.DataFrame:
         """Return a copy of the transmission dataframe only
@@ -425,7 +475,6 @@ class Instrument():
                 palette="husl",
                 linewidth=0.6,
                 legend=False)
-
 
             cwls = self.cwls()[[0, len(self.cwls())//2, -1]].unique()
             trans_df = trans_df[trans_df['cwl'].isin(cwls)]

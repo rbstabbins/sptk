@@ -214,17 +214,30 @@ class Observation():
         obs_df = pd.concat([self.noiseless_df].copy()*n_duplicates).sort_index()
 
         # apply noise to the duplicate entries  
-        if snr is None:    
-            snr = self.instrument.main_df['snr'].to_numpy()  
+        if snr is None:
+            try:    
+                snr = self.instrument.main_df['snr'].to_numpy()  
+            except KeyError as exc:
+                raise KeyError("No SNR given and no SNR defined in Instrument") from exc
+        else:
+            if isinstance(snr, (int, float)):
+                snr = np.full(obs_df.shape[0], snr)
+            elif isinstance(snr, (list, tuple)):
+                # convert to np.array
+                snr = np.array(snr)
+            else:
+                raise ValueError("SNR must be a float or np.array")
+            if len(snr) != len(self.chnl_lbls):
+                raise ValueError("SNR array length does not match number of entries")
         
-        if spd is not None:
+        if spd is None:
+            noise = obs_df[self.wvls].to_numpy()/snr        
+        else:
             # assume that the SNR is defined observations with relfectance given
             # by the values of the SPD in each channel. Scale the reflectance
             # noise according to the signal expected in each channel relative
             # to this.
             noise = np.divide(np.sqrt(obs_df[self.wvls].to_numpy()), snr)
-        else:
-            noise = obs_df[self.wvls].to_numpy()/snr        
 
         if seed is not None:
             np.random.seed(seed) # set the seed of the random distribution

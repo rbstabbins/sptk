@@ -714,6 +714,9 @@ class SpectralLibraryAnalyser():
                 data)
             data = interp((lines_out, wvls_out))
 
+        # if the data is from an Observation, then I want the interpolation to
+        # reflect the band widths...
+
         # draw plot
         im = ax.imshow(
                 data,
@@ -786,6 +789,16 @@ class SpectralLibraryAnalyser():
         else:
             ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
             ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
+
+        # draw vertical lines at each observation instrument cwl
+        if self.obj_type == 'observation':
+            for fltr in self.spectra_obj.instrument.filter_ids:
+                cwl = self.spectra_obj.instrument.cwls()[fltr]
+                ax.axvline(x=cwl, color='white', lw=0.5, ls='-')
+                # draw dotted lines at ±fwhm
+                fwhm = self.spectra_obj.instrument.fwhms()[fltr]
+                ax.axvline(x=cwl+fwhm, color='white', lw=0.5, ls='--')
+                ax.axvline(x=cwl-fwhm, color='white', lw=0.5, ls='--')
 
         # set ticks
         ax.tick_params(left = False, right=False) 

@@ -794,11 +794,12 @@ class SpectralLibraryAnalyser():
         if self.obj_type == 'observation':
             for fltr in self.spectra_obj.instrument.filter_ids:
                 cwl = self.spectra_obj.instrument.cwls()[fltr]
-                ax.axvline(x=cwl, color='white', lw=0.5, ls='-')
-                # draw dotted lines at ±fwhm
-                fwhm = self.spectra_obj.instrument.fwhms()[fltr]
-                ax.axvline(x=cwl+fwhm, color='white', lw=0.5, ls='--')
-                ax.axvline(x=cwl-fwhm, color='white', lw=0.5, ls='--')
+                col = self.spectra_obj.instrument.filter_cols.loc[fltr].to_numpy()
+                ax.axvline(x=cwl, color=col, lw=0.6, ls='-')
+                # # draw dotted lines at ±fwhm
+                # fwhm = self.spectra_obj.instrument.fwhms()[fltr]
+                # ax.axvline(x=cwl+fwhm/2, color=col, lw=0.4, ls='--')
+                # ax.axvline(x=cwl-fwhm/2, color=col, lw=0.4, ls='--')
 
         # set ticks
         ax.tick_params(left = False, right=False) 
@@ -1763,7 +1764,7 @@ class SpectralLibraryAnalyser():
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
         ax.set_title(cmf_label, fontsize=cfg.LABEL_S)
 
-        fig.tight_layout()
+        # fig.tight_layout()
 
         return fig, ax
     
@@ -1886,6 +1887,9 @@ class SpectralLibraryAnalyser():
         
         # assign the new colour object df to the spectra object
         # collect the colour space columns under the cmf_label multiindex
+        # why drop the other columns?? The information is not going to be 
+        # renamed, so it keeps it tidy. Only problem might occur when other 
+        # colour-spaces are added...
         col_obj.main_df = col_obj.main_df.loc[:, 'Colour':]
         # drop 'Colour' column
         col_obj.main_df.drop('Colour', axis=1, inplace=True)
@@ -2050,6 +2054,7 @@ class SpectralLibraryAnalyser():
         
         # if compare, load the comparison material collection colour df
         if srgb_compare and self.obj_type == 'observation':
+            # TODO handle noise
             srgb_obj = srgb_compare.material_collection
             srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
             srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
@@ -2073,8 +2078,16 @@ class SpectralLibraryAnalyser():
         t_rows = 0 # counter of total number of rows needed for all categories
 
         # populate category counters
-        index = self.spectra_obj.main_df.index
-        cats = self.spectra_obj.main_df['Category'][index]
+        
+        # handle noise
+        if self.spectra_obj.noisy:
+            data_df = self.spectra_obj.noiseless_df
+            index = data_df.index
+            cats = data_df['Category'][index]
+        else:
+            index = self.spectra_obj.main_df.index
+            cats = self.spectra_obj.main_df['Category'][index]
+        
         for cat in cats.unique():
             cat_n = len(cats[cats == cat]) # number of entries in given category
             cat_ns[cat] = cat_n # dict lookup of # entries in category
@@ -2184,8 +2197,15 @@ class SpectralLibraryAnalyser():
 
                 # get the index of the samples in this category    
                 i = page_cats[page][cat][0]
-                f = page_cats[page][cat][1]            
-                cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]
+                f = page_cats[page][cat][1]
+                if self.spectra_obj.noisy:
+                    colour_df = self.spectra_obj.colour_df[conditions['label']]
+                    labeled_colour_df = pd.concat([self.spectra_obj.get_hdr_df(), colour_df], axis=1)
+                    data_df = self.spectra_obj.colour_df.groupby('Root Data ID', level=0).mean(numeric_only=True)
+                    cat_index = self.spectra_obj.noiseless_df['Category'] == cat
+                    cat_df = data_df[cat_index]
+                else:
+                    cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]                
                 cat_rgb = cat_df[conditions['label']][['R', 'G', 'B']].iloc[i:f+1]
                 
                 # get the number of rows used by this category
@@ -2225,12 +2245,10 @@ class SpectralLibraryAnalyser():
                                         s=200,
                                         edgecolor='black')
                     
-                    # annotate                                        
-                    min_name = self.spectra_obj.main_df.loc[entry]['Species']
+                    # annotate                                                            
                     entry = str(entry).replace('_', '\n') # turn underscore into carriage return
                     entry = str(entry).replace(' ', '\n') # get Species
                     entry = entry.title() 
-                    entry = min_name.title() + '\n' + entry
                     ax_c.annotate(entry, (x, y), 
                                      (0,-1.5), 
                                      textcoords='offset fontsize', 
@@ -2320,7 +2338,7 @@ class SpectralLibraryAnalyser():
         ax.invert_yaxis()
         ax.set_title(f'{title_sfx}\n RGB Cube', fontsize=cfg.LABEL_S)
         
-        fig.tight_layout()
+        # fig.tight_layout()
         # export as pdf   
 
         return fig, ax
@@ -2549,7 +2567,7 @@ class SpectralLibraryAnalyser():
         # set DPI
         fig.set_dpi(cfg.DPI)
 
-        fig.tight_layout()      
+        # fig.tight_layout()      
 
         return fig, ax
 
@@ -2721,7 +2739,7 @@ class SpectralLibraryAnalyser():
             ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
         ax.set_title(fr"{title_sfx}""\n CIE L*C*h(ab) Chroma "rf"($r$) hue ($\theta$) Plane", fontsize=cfg.LABEL_S)
         
-        fig.tight_layout()        
+        # fig.tight_layout()        
         # export as pdf
 
         return fig, ax
@@ -2855,6 +2873,6 @@ class SpectralLibraryAnalyser():
         plt.gcf().set_size_inches(cfg.FIG_SIZE[0]*n_cols, cfg.FIG_SIZE[1]*n_rows)
 
         # constraint he layout of the subplots
-        fig.tight_layout()
+        # fig.tight_layout()
         
         return figs_cs, axes_cs

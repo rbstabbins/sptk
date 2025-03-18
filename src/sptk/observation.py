@@ -846,7 +846,7 @@ class Observation():
 
     def get_hdr_df(self,
             category: str = None,
-            mineral_name: str = None) -> pd.DataFrame:
+            species: str = None) -> pd.DataFrame:
         """Return a copy of the header dataframe subset of the array.
         Allows for selection of data from specific category and mineral type.
 
@@ -857,7 +857,7 @@ class Observation():
         :return: material collection header data
         :rtype: pd.DataFrame
         """
-        subset_df = self.get_subset_df(category, mineral_name)
+        subset_df = self.get_subset_df(category, species)
         hdr_df = subset_df.loc[:, self.material_collection.header_list]
         return hdr_df
 

@@ -344,9 +344,38 @@ class Instrument():
             col_df = pd.DataFrame(rgb, columns=['r','g','b'], index=self.filter_ids)
         else:
             cwl_colours = 'husl'
-
+            # get list of colours based on husl colour palette
+            col_df = pd.DataFrame(
+                    sns.color_palette(
+                        cwl_colours, 
+                        n_colors=len(self.filter_ids)), 
+                    columns=['r','g','b'], 
+                    index=self.filter_ids)
         return col_df
 
+    def set_snr(self,
+                snr: Union[float, np.ndarray, List, Dict, pd.Series]) -> None:
+        """Set the signal-to-noise ratio of the instrument
+
+        :param snr: signal-to-noise ratio(s) to set
+        :type snr: Union[float, np.array, List, Dict, pd.Series]
+        """
+        if isinstance(snr, (float, int)):
+            # set all channels to the same snr
+            self.main_df['snr'] = snr
+        elif isinstance(snr, (np.ndarray, list)):
+            # set each channel to the corresponding snr
+            self.main_df['snr'] = snr
+        elif isinstance(snr, (Dict, pd.Series)):
+            # set each channel to the corresponding snr
+            self.main_df['snr'] = snr
+        else:
+            raise ValueError('SNR data type not recognised.')
+
+        # put snr after fwhms in dataframe
+        snr_col = self.main_df.pop('snr')
+        self.main_df.insert(2, 'snr', snr_col)
+        
     def get_trans_df(self) -> pd.DataFrame:
         """Return a copy of the transmission dataframe only
 
@@ -430,36 +459,8 @@ class Instrument():
             ybound=(-0.05,1.15),
             autoscale_on=False)        
         
-        # TODO colour code the filters in a more appropriate way
-        if self.filter_ids[0][0] != 'S':
-            # set colours for the filters        
-            norm_trans = self.get_trans_df().T
-            sds = colour.MultiSpectralDistributions(norm_trans)    
-            # normalise the spds
-            # sds = sds / np.sum(sds, axis=1)[:,None]
-                
-            illum = colour.SDS_ILLUMINANTS['D65'] # use a D65 standard illuminant
-            xyz = colour.sd_to_XYZ(sds, illuminant=illum, k=1.0)/100 # convert to XYZ space
-            # xyz = xyz / np.sum(xyz, axis=1)[:,None]
-            # xyz = xyz.clip(0,100) # clip to 0-1 range
-            rgb = colour.XYZ_to_sRGB(xyz) # convert to sRGB    
-            rgb = rgb.clip(0,1) # clip to 0-1 range
-                
-            # if np.any(rgb < 0):
-            #     # We're not in the RGB gamut: approximate by desaturating
-            #     w = - np.min(rgb, axis=0)
-            #     rgb = rgb + w
-            if not np.all(rgb==0):
-                # Normalize the rgb vector
-                rgb /= np.max(rgb)
-
-            # just do central wavelength to XYZ
-            # xyz = colour.wavelength_to_XYZ(self.cwls().to_numpy())
-            # colour.plotting.plot_single_sd(sds[:,0])
-
-            cwl_colours = sns.color_palette(rgb)
-        else:
-            cwl_colours = 'husl'
+        # get colour palette from the filter colours DataFrame
+        cwl_colours = self.filter_cols.to_numpy()        
 
         # if instrument is a spectrometer, select subset of wavelengths
         # if filter ids start with S then it's a spectrometer
@@ -480,6 +481,8 @@ class Instrument():
             trans_df = trans_df[trans_df['cwl'].isin(cwls)]
             filter_ids = trans_df.filter_id.unique()
             fwhms = trans_df.fwhm.unique()
+            # downselect cwl_colours
+            cwl_colours = cwl_colours[[0, len(cwl_colours)//2, -1]]
         else:
             cwls = self.cwls().to_numpy()
             filter_ids = self.filter_ids
@@ -597,10 +600,22 @@ class Instrument():
             ybound=(0, 1.1*np.max(spectral_resolution)),
             autoscale_on=False)        
         
-        sns.lineplot(
-            x=self.cwls(),
-            y=spectral_resolution,
-            ax=res_ax)
+        # get colour palette from the filter colours DataFrame
+        cwl_colours = self.filter_cols.to_numpy()        
+        res_ax.scatter(
+            self.cwls(),
+            spectral_resolution,
+            marker='o',
+            c=cwl_colours,
+            zorder=1
+        )
+
+        res_ax.plot(
+            self.cwls(),
+            spectral_resolution,
+            'k--',
+            zorder=0
+        )
         
         res_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         res_ax.set_ylabel('Spectral Resolving Power', fontsize=cfg.LABEL_S)
@@ -662,10 +677,22 @@ class Instrument():
             ybound=(0, 1.1*np.max(fwhms)),
             autoscale_on=False)
 
-        sns.lineplot(
-            x=self.cwls(),
-            y=fwhms,
-            ax=fwhm_ax)
+        # get colour palette from the filter colours DataFrame
+        cwl_colours = self.filter_cols.to_numpy()        
+        fwhm_ax.scatter(
+            self.cwls(),
+            fwhms,
+            marker='o',
+            c=cwl_colours,
+            zorder=1
+        )
+
+        fwhm_ax.plot(
+            self.cwls(),
+            fwhms,
+            'k--',
+            zorder=0
+        )
 
         fwhm_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         fwhm_ax.set_ylabel('FWHM (nm)', fontsize=cfg.LABEL_S)
@@ -722,18 +749,34 @@ class Instrument():
         plt.rcParams['font.sans-serif'] = 'Futura'
         sns.despine(right=True, top=True)
 
-
-        snrs = self.main_df['snr']
+        try:
+            snrs = self.main_df['snr']
+            snr_max = np.nanmax(snrs)
+        except KeyError:
+            print('No SNR data available for this instrument.')
+            return fig, snr_ax
 
         snr_ax.set(
             xbound=(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10),
-            ybound=(0, 1.1*np.max(snrs)),
+            ybound=(0, 1.1*snr_max),
             autoscale_on=False)
 
-        sns.lineplot(
-            x=self.cwls(),
-            y=snrs,
-            ax=snr_ax)
+        # get colour palette from the filter colours DataFrame
+        cwl_colours = self.filter_cols.to_numpy()        
+        snr_ax.scatter(
+            self.cwls(),
+            snrs,
+            marker='o',
+            c=cwl_colours,
+            zorder=1
+        )
+
+        snr_ax.plot(
+            self.cwls(),
+            snrs,
+            'k--',
+            zorder=0
+        )
         
         snr_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         snr_ax.set_ylabel('Signal-to-Noise Ratio', fontsize=cfg.LABEL_S)

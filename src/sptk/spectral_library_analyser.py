@@ -792,14 +792,16 @@ class SpectralLibraryAnalyser():
 
         # draw vertical lines at each observation instrument cwl
         if self.obj_type == 'observation':
-            for fltr in self.spectra_obj.instrument.filter_ids:
-                cwl = self.spectra_obj.instrument.cwls()[fltr]
-                col = self.spectra_obj.instrument.filter_cols.loc[fltr].to_numpy()
-                ax.axvline(x=cwl, color=col, lw=0.6, ls='-')
-                # # draw dotted lines at ±fwhm
-                # fwhm = self.spectra_obj.instrument.fwhms()[fltr]
-                # ax.axvline(x=cwl+fwhm/2, color=col, lw=0.4, ls='--')
-                # ax.axvline(x=cwl-fwhm/2, color=col, lw=0.4, ls='--')
+            # if not a spectrometer
+            if self.spectra_obj.instrument.filter_ids[0][0] != 'S':
+                for fltr in self.spectra_obj.instrument.filter_ids:
+                    cwl = self.spectra_obj.instrument.cwls()[fltr]
+                    col = self.spectra_obj.instrument.filter_cols.loc[fltr].to_numpy()
+                    ax.axvline(x=cwl, color=col, lw=0.6, ls='-')
+                    # # draw dotted lines at ±fwhm
+                    # fwhm = self.spectra_obj.instrument.fwhms()[fltr]
+                    # ax.axvline(x=cwl+fwhm/2, color=col, lw=0.4, ls='--')
+                    # ax.axvline(x=cwl-fwhm/2, color=col, lw=0.4, ls='--')
 
         # set ticks
         ax.tick_params(left = False, right=False) 

@@ -1320,170 +1320,6 @@ class SpectralLibraryAnalyser():
         self.spectra_obj_cr.continuum_removed = True
         return self.spectra_obj_cr
 
-    # def plot_waterfall(self, 
-    #                     scope: Literal[
-    #                             'all', # all data
-    #                             'Libraries', # 1 subplot for each library
-    #                             'Categories', # 1 subplot for each category
-    #                             'Groups', # 1 subplot for each group
-    #                             'Subgroups', # 1 subplot for each subgroup
-    #                             'Species', # 1 subplot for each species
-    #                             'Sample IDs', # 1 subplot for each sample
-    #                             'Data IDs', # 1 subplot for each data ID
-    #                             str # 1 subplot for a specific category, group, subgroup, species, or sample
-    #                         ]='all',
-    #                     groupby: Literal[
-    #                             'Library', # hue/style by library
-    #                             'Category', # hue/style by category
-    #                             'Group', # hue/style by group
-    #                             'Subgroup', # hue/style by subgroup
-    #                             'Species', # hue/style by species
-    #                             'Sample ID', # hue/style by Sample ID
-    #                             'Data ID' # hue/style by Data ID
-    #                         ]='Category',
-    #                     continuum_removed: bool=False) -> plt.Axes:
-    #     """Display the reflectance data in 2D density plots, with colour giving
-    #     absorption depth.
-
-    #     :param continuum_removed: indicate to use continuum_removed data,
-    #             defaults to True
-    #     :type continuum_removed: bool, optional
-    #     """
-
-    #     # get data
-        
-
-    #     if continuum_removed:
-    #         try:
-    #             vis_df = self.spectra_obj_cr.main_df
-    #         except AttributeError:
-    #             self.remove_continuum()
-    #             vis_df = self.spectra_obj_cr.main_df
-    #     else:
-    #         vis_df = self.spectra_obj.main_df
-    #     vis_df.sort_values(by=['Category', 'Species', 'Sample ID'],
-    #                                         inplace=True, ignore_index = True)
-
-    #     if self.obj_type == 'material_collection':
-    #         title = 'High-Resolution Spectral Library'
-    #         data = vis_df[self.wvls].to_numpy() - 1.0
-    #     elif self.obj_type == 'observation':
-    #         title=f'{self.spectra_obj.instrument.name} sampled Spectral Library'
-    #         data = self.spectra_obj_cr.resample_wavelengths() - 1.0
-    #     else:
-    #         raise ValueError("spectral object type not recognised")
-
-    #     # get locations of each category
-    #     cat_ticks = []
-    #     cat_label_y = {}
-    #     cat_bounds = {}
-    #     for cat in self.spectra_obj.categories:
-    #         cat_lo = min(vis_df[vis_df.Category == cat].index)
-    #         cat_hi = max(vis_df[vis_df.Category == cat].index)
-    #         cat_bounds[cat] = [cat_lo, cat_hi]
-    #         cat_label_y[cat] = np.mean([cat_lo, cat_hi]) + 1
-    #         cat_ticks.append(cat_lo)
-
-    #     # get locations of each Species
-    #     min_ticks = []
-    #     mineral_names = vis_df['Species'].unique()
-    #     mineral_label_y = {}
-    #     mineral_bounds = {}
-    #     for mineral_name in mineral_names:
-    #         min_lo = min(vis_df[vis_df['Species'] == mineral_name].index)
-    #         min_hi = max(vis_df[vis_df['Species'] == mineral_name].index)
-    #         mineral_bounds[mineral_name] = [min_lo, min_hi]
-    #         mineral_label_y[mineral_name] = np.mean([min_lo, min_hi])
-    #         min_ticks.append(min_lo)
-
-    #     # set plot limits
-    #     wvl_lo = cfg.SAMPLE_RES['wvl_min']
-    #     wvl_hi = cfg.SAMPLE_RES['wvl_max']
-    #     # set up a good figure size so that good # of samples are shown per cm.
-    #     # A4 = 210 x 297 mm
-    #     # minus 3 cm for border
-    #     # fig size - width = 190 mm
-    #     # fig size - height = 2mm * #samples
-    #     height = 0.2*len(data)
-    #     if height < 15:
-    #         height = 15 # limit the minimum height to 15 cm
-    #     fig, ax = plt.subplots(figsize=[15*cfg.CM, height*cfg.CM], dpi=cfg.DPI)
-    #     cmap = plt.get_cmap('viridis_r')
-    #     cmap.set_bad('black')
-
-    #     # draw plot
-    #     im = ax.imshow(
-    #             data,
-    #             aspect='auto',
-    #             extent=[wvl_lo, wvl_hi, 0, len(data)],
-    #             interpolation='nearest',
-    #             origin='lower',
-    #             cmap=cmap, vmin=-1.0, vmax=0.0)
-    #     ax.set_xlabel('Wavelength (nm)')
-    #     ax.set_title(title)
-
-    #     # add Species labels
-    #     for mineral_name in mineral_names:
-    #         ax.annotate(
-    #             '',
-    #             xy=(wvl_hi + 50, mineral_bounds[mineral_name][0]),
-    #             xytext=(wvl_hi + 50, mineral_bounds[mineral_name][1]+1),
-    #             arrowprops=dict(arrowstyle='<|-|>', shrinkA=0, shrinkB=0),
-    #             annotation_clip=False)
-    #         ax.annotate(
-    #             mineral_name,
-    #             xy=(wvl_hi + 70,mineral_label_y[mineral_name]),
-    #             xytext=(wvl_hi + 70,mineral_label_y[mineral_name]),
-    #             rotation=45,
-    #             ha='left',
-    #             va='bottom',
-    #             annotation_clip=False)
-
-    #     # add category labels
-    #     for cat in self.spectra_obj.categories:
-    #         ax.annotate(
-    #             '',
-    #             xy=(wvl_lo - 50, cat_bounds[cat][0]),
-    #             xytext=(wvl_lo - 50, cat_bounds[cat][1]+1),
-    #             arrowprops=dict(arrowstyle='<|-|>', shrinkA=0, shrinkB=0),
-    #             annotation_clip=False)
-    #         ax.annotate(
-    #             cat,
-    #             xy=(wvl_lo - 70,cat_label_y[cat]),
-    #             xytext=(wvl_lo - 70,cat_label_y[cat]),
-    #             rotation=45,
-    #             ha='right',
-    #             va='top',
-    #             annotation_clip=False)
-
-    #     # set ticks
-    #     minor_ticks = np.arange(0, len(data)+1, 1)
-    #     ax.set_yticks(minor_ticks, minor=True)
-    #     ax.grid(which='minor', axis='y', lw=0.5)
-    #     ax.set_yticks(min_ticks, minor=False)
-    #     ax.tick_params(right=True)
-    #     ax.set_yticklabels([])
-    #     ax.grid(which='major', axis='y', lw=0.8, color='w')
-    #     ax.tick_params(right=True)
-
-    #     divider = make_axes_locatable(ax)
-    #     cax = divider.new_vertical(size=0.5*cfg.CM, pad=0.6, pack_start = True)
-    #     fig.add_axes(cax)
-
-    #     cbar = plt.colorbar(im, cax = cax, orientation='horizontal', shrink=0.5)
-    #     cbar.set_label('Band Depth')
-
-    #     fig.tight_layout()
-
-    #     # export
-    #     plt.rcParams['svg.fonttype'] = 'none'
-    #     filepath=Path(self.project_dir,'waterfall').with_suffix('.svg')
-    #     fig.savefig(filepath, bbox_inches='tight', pad_inches = 0.1, format='svg')
-
-    #     plt.show()
-
-    #     return fig, ax
-
     def analyse_bands(self):
         """Find the centre-wavelengths, fwhms, depths and areas of distinct
         bands in each entry.
@@ -2036,6 +1872,25 @@ class SpectralLibraryAnalyser():
     
     def render_colour_contact_sheet(self,
             conditions: Dict,
+            scope: Literal[
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',         
+            groupby: Literal[
+                'Library', # hue/style by library
+                'Category', # hue/style by category
+                'Group', # hue/style by group
+                'Subgroup', # hue/style by subgroup
+                'Species', # hue/style by species
+                'Sample ID', # hue/style by Sample ID
+                'Data ID' # hue/style by Data ID
+                ]='Category',
             srgb_compare: Union[bool, object]=False
             ) -> Tuple[plt.figure, plt.axes]:
         """Render the colour of each entry in the spectral library according
@@ -2099,7 +1954,7 @@ class SpectralLibraryAnalyser():
                 cat_rows[cat] = int(np.ceil(cat_n / N_cols))
             else: # otherwise the number of columns is the number of entries
                 cat_cols[cat] = cat_n 
-                cat_rows[cat] = 1 # and the numebr of rows is 1                        
+                cat_rows[cat] = 1 # and the number of rows is 1                        
             t_rows += cat_rows[cat] # running total of rows needed for all categories
 
         N_pages = 1 + (t_rows-1) // N_rows # number of pages needed to plot all
@@ -2284,8 +2139,27 @@ class SpectralLibraryAnalyser():
         return figs, axes
     
     def render_rgb_cube(self,
-                        conditions: Dict,
-                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
+            conditions: Dict,
+            scope: Literal[
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',         
+            groupby: Literal[
+                'Library', # hue/style by library
+                'Category', # hue/style by category
+                'Group', # hue/style by group
+                'Subgroup', # hue/style by subgroup
+                'Species', # hue/style by species
+                'Sample ID', # hue/style by Sample ID
+                'Data ID' # hue/style by Data ID
+                ]='Category',
+            ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the RGB cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -2346,8 +2220,27 @@ class SpectralLibraryAnalyser():
         return fig, ax
     
     def render_XYZ_cube(self,
-                        conditions: Dict,
-                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
+            conditions: Dict,
+            scope: Literal[
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',         
+            groupby: Literal[
+                'Library', # hue/style by library
+                'Category', # hue/style by category
+                'Group', # hue/style by group
+                'Subgroup', # hue/style by subgroup
+                'Species', # hue/style by species
+                'Sample ID', # hue/style by Sample ID
+                'Data ID' # hue/style by Data ID
+                ]='Category',
+            ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the XYZ cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -2405,8 +2298,27 @@ class SpectralLibraryAnalyser():
         return fig, ax
     
     def render_xyY_cube(self,
-                        conditions: Dict,
-                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
+            conditions: Dict,
+            scope: Literal[
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',         
+            groupby: Literal[
+                'Library', # hue/style by library
+                'Category', # hue/style by category
+                'Group', # hue/style by group
+                'Subgroup', # hue/style by subgroup
+                'Species', # hue/style by species
+                'Sample ID', # hue/style by Sample ID
+                'Data ID' # hue/style by Data ID
+                ]='Category',
+            ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the xyY cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -2464,8 +2376,27 @@ class SpectralLibraryAnalyser():
         return fig, ax
 
     def render_xy_chromaticity_diagram(self,
-                        conditions: Dict,
-                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
+            scope: Literal[
+                'all',
+                'libraries', # one plot for each library used
+                'categories', # one plot for each category
+                'groups', # one plot for each group
+                'subgroups', # one plot for each subgroup
+                'species', # one plot for each species
+                'samples', # one plot for each sample
+                str # for specific category, group, subgroup, species, or sample
+                ]='all',         
+            groupby: Literal[
+                'Library', # hue/style by library
+                'Category', # hue/style by category
+                'Group', # hue/style by group
+                'Subgroup', # hue/style by subgroup
+                'Species', # hue/style by species
+                'Sample ID', # hue/style by Sample ID
+                'Data ID' # hue/style by Data ID
+                ]='Category',
+            conditions: Dict,
+            ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the xy chromaticity diagram of the spectral library for 
         the given conditions.
 
@@ -2573,9 +2504,28 @@ class SpectralLibraryAnalyser():
 
         return fig, ax
 
-    def render_Lab_cube(self,
-                        conditions: Dict,
-                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
+    def render_Lab_cube(self,        
+            conditions: Dict,
+            scope: Literal[
+                    'all',
+                    'libraries', # one plot for each library used
+                    'categories', # one plot for each category
+                    'groups', # one plot for each group
+                    'subgroups', # one plot for each subgroup
+                    'species', # one plot for each species
+                    'samples', # one plot for each sample
+                    str # for specific category, group, subgroup, species, or sample
+                    ]='all',         
+            groupby: Literal[
+                    'Library', # hue/style by library
+                    'Category', # hue/style by category
+                    'Group', # hue/style by group
+                    'Subgroup', # hue/style by subgroup
+                    'Species', # hue/style by species
+                    'Sample ID', # hue/style by Sample ID
+                    'Data ID' # hue/style by Data ID
+                    ]='Category',
+            ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the L*a*b* cube of the spectral library for the given conditions.
 
         :param conditions: Conditions used in the colour computation
@@ -2661,9 +2611,28 @@ class SpectralLibraryAnalyser():
 
         return fig, ax
 
-    def render_Chab_plane(self,
-                        conditions: Dict,
-                        ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
+    def render_Chab_plane(self,        
+            conditions: Dict,
+            scope: Literal[
+                    'all',
+                    'libraries', # one plot for each library used
+                    'categories', # one plot for each category
+                    'groups', # one plot for each group
+                    'subgroups', # one plot for each subgroup
+                    'species', # one plot for each species
+                    'samples', # one plot for each sample
+                    str # for specific category, group, subgroup, species, or sample
+                ]='all',         
+            groupby: Literal[
+                    'Library', # hue/style by library
+                    'Category', # hue/style by category
+                    'Group', # hue/style by group
+                    'Subgroup', # hue/style by subgroup
+                    'Species', # hue/style by species
+                    'Sample ID', # hue/style by Sample ID
+                    'Data ID' # hue/style by Data ID
+                ]='Category',
+            ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the C*h(ab) plane of the spectral library for the given conditions.
         Note that no method is available AFAIK for rendring a polar cyclindrical
         plot of the LCh space. So only plotting 2D C*h polar plane.
@@ -2747,16 +2716,35 @@ class SpectralLibraryAnalyser():
         return fig, ax
 
     def render_colour(self, 
-                    conditions: Dict,
-                    colour_contact_sheet: bool=True,
-                    sampling_profiles: bool=True,
-                    rgb_cube: bool=True,
-                    XYZ_cube: bool=False,
-                    xyY_cube: bool=False,
-                    xy_chromaticity_diagram: bool=True,
-                    Lab_cube: bool=False,
-                    Chab_plane: bool=True,
-                      ) -> Tuple[plt.figure, plt.axes]:
+            conditions: Dict,
+            scope: Literal[
+                    'all',
+                    'libraries', # one plot for each library used
+                    'categories', # one plot for each category
+                    'groups', # one plot for each group
+                    'subgroups', # one plot for each subgroup
+                    'species', # one plot for each species
+                    'samples', # one plot for each sample
+                    str # for specific category, group, subgroup, species, or sample
+                    ]='all',         
+            groupby: Literal[
+                    'Library', # hue/style by library
+                    'Category', # hue/style by category
+                    'Group', # hue/style by group
+                    'Subgroup', # hue/style by subgroup
+                    'Species', # hue/style by species
+                    'Sample ID', # hue/style by Sample ID
+                    'Data ID' # hue/style by Data ID
+                ]='Category',
+            colour_contact_sheet: bool=True,
+            sampling_profiles: bool=True,
+            rgb_cube: bool=True,
+            XYZ_cube: bool=False,
+            xyY_cube: bool=False,
+            xy_chromaticity_diagram: bool=True,
+            Lab_cube: bool=False,
+            Chab_plane: bool=True
+            ) -> Tuple[plt.figure, plt.axes]:
         """Render the colour of each spectrum in the spectral library according
         to the given computed colour coordinates.
 
@@ -2782,11 +2770,19 @@ class SpectralLibraryAnalyser():
         :rtype: Tuple[plt.figure, plt.axes]
         """
 
-        # prepare the figure(s)
+        # ----------------------------------------------------------------------
+        # make the colour contact sheet separately
+        # ----------------------------------------------------------------------
         if colour_contact_sheet:
             # render the colour contact sheet
-            figs_cs, axes_cs = self.render_colour_contact_sheet(conditions)
+            figs_cs, axes_cs = self.render_colour_contact_sheet(conditions,
+                                                                scope=scope,
+                                                                groupby=groupby)
         
+        # ----------------------------------------------------------------------
+        # prepare the figure(s) of the colourspace plots
+        # ----------------------------------------------------------------------
+
         # count the number of figures other than the contact sheet
         n_figs = sum([
             rgb_cube, 
@@ -2795,7 +2791,9 @@ class SpectralLibraryAnalyser():
             xy_chromaticity_diagram, 
             Lab_cube, 
             Chab_plane])
-        # set the number of rows and columns for the figure according to n_figures, with max of 2 columns
+        
+        # set the number of rows and columns for the figure according to 
+        # n_figures, with max of 2 columns
         n_rows = int(np.ceil(n_figs / 2))
         n_cols = min(n_figs, 2)
 
@@ -2810,7 +2808,9 @@ class SpectralLibraryAnalyser():
                          width_ratios=[1, 1], wspace=0.1,
                          hspace=0.5, height_ratios=[1, 1])
 
-        # call component rendering functions
+        # ----------------------------------------------------------------------
+        # call rendering functions for each plot type
+        # ----------------------------------------------------------------------
         i = 0
         if sampling_profiles:
             ax = fig.add_subplot(spec[i])
@@ -2823,19 +2823,31 @@ class SpectralLibraryAnalyser():
             i += 1
         if rgb_cube:
             ax = fig.add_subplot(spec[i], projection='3d')
-            fig_rgb, ax_rgb = self.render_rgb_cube(conditions, ax=ax)            
+            fig_rgb, ax_rgb = self.render_rgb_cube(
+                                            conditions, 
+                                            scope, 
+                                            groupby, 
+                                            ax=ax)            
             fig_label = chr(ord('@')+i+1)
             ax.set_title(fig_label+'. RGB Cube', fontsize=cfg.LEGEND_S)        
             i += 1
         if XYZ_cube:
             ax = fig.add_subplot(spec[i], projection='3d')
-            fig_XYZ, ax_XYZ = self.render_XYZ_cube(conditions, ax=ax)            
+            fig_XYZ, ax_XYZ = self.render_XYZ_cube(
+                                            conditions, 
+                                            scope, 
+                                            groupby, 
+                                            ax=ax)            
             fig_label = chr(ord('@')+i+1)
             ax.set_title(fig_label+'. CIE XYZ Cube', fontsize=cfg.LEGEND_S)        
             i += 1
         if xyY_cube:
             ax = fig.add_subplot(spec[i], projection='3d')
-            fig_xyY, ax_xyY = self.render_xyY_cube(conditions, ax=ax)            
+            fig_xyY, ax_xyY = self.render_xyY_cube(
+                                            conditions, 
+                                            scope, 
+                                            groupby, 
+                                            ax=ax)            
             fig_label = chr(ord('@')+i+1)
             ax.set_title(fig_label+'. CIE xyY Cube', fontsize=cfg.LEGEND_S)        
             i += 1
@@ -2851,30 +2863,41 @@ class SpectralLibraryAnalyser():
                 dpi=cfg.DPI,
                 axes=ax
                 )
-            fig_xy, ax_xy = self.render_xy_chromaticity_diagram(conditions, ax=ax)    
+            fig_xy, ax_xy = self.render_xy_chromaticity_diagram(conditions, scope, groupby, ax=ax)    
             # remove title
             fig_label = chr(ord('@')+i+1)
             ax.set_title(fig_label+'. CIE Chromaticity Diagram', fontsize=cfg.LEGEND_S)        
             i += 1
         if Lab_cube:
             ax = fig.add_subplot(spec[i], projection='3d')
-            fig_Lab, ax_Lab = self.render_Lab_cube(conditions, ax=ax)
+            fig_Lab, ax_Lab = self.render_Lab_cube( 
+                                                conditions, 
+                                                scope, 
+                                                groupby, 
+                                                ax=ax)
             fig_label = chr(ord('@')+i+1)
             ax.set_title(fig_label+'. CIE L\*a\*b\* Cube', fontsize=cfg.LEGEND_S)        
             i += 1
         if Chab_plane:
             ax = fig.add_subplot(spec[i], projection='polar')
-            fig_Ch, ax_Ch = self.render_Chab_plane(conditions, ax=ax)
+            fig_Ch, ax_Ch = self.render_Chab_plane(
+                                                conditions, 
+                                                scope, 
+                                                groupby, 
+                                                ax=ax)
             fig_label = chr(ord('@')+i+1)
             ax.set_title(fig_label+'. CIE Chroma 'r'($r$) Hue ($\theta$) Plane', fontsize=cfg.LEGEND_S)        
             i += 1
 
+        # ----------------------------------------------------------------------
+        # final figure formatting
+        # ----------------------------------------------------------------------
         # add title to plot
         fig.suptitle(f'{self.spectra_obj.spectral_library} '+conditions['label'], fontsize=cfg.TITLE_S)
 
         plt.gcf().set_size_inches(cfg.FIG_SIZE[0]*n_cols, cfg.FIG_SIZE[1]*n_rows)
 
-        # constraint he layout of the subplots
+        # constraint the layout of the subplots
         # fig.tight_layout()
         
         return figs_cs, axes_cs

@@ -468,7 +468,7 @@ class MaterialCollection():
 
         #  always use species + filename as Data ID
         # no don't do this - but make a label for it when plotting...
-        hdr.loc['Data ID'] = species.capitalize() + ' ' +data_id
+        hdr.loc['Data ID'] = data_id + ' ' + species.capitalize()
         # should we be taking sample id from filename?
 
         # handling of new Grain Size and Grain Size Description entries to VISOR

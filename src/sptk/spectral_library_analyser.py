@@ -1898,17 +1898,7 @@ class SpectralLibraryAnalyser():
         return false_col_obj
     
     def render_colour_contact_sheet(self,
-            conditions: Dict,
-            scope: Literal[
-                'all',
-                'libraries', # one plot for each library used
-                'categories', # one plot for each category
-                'groups', # one plot for each group
-                'subgroups', # one plot for each subgroup
-                'species', # one plot for each species
-                'samples', # one plot for each sample
-                str # for specific category, group, subgroup, species, or sample
-                ]='all',         
+            conditions: Dict,       
             groupby: Literal[
                 'Library', # hue/style by library
                 'Category', # hue/style by category
@@ -1942,108 +1932,108 @@ class SpectralLibraryAnalyser():
             srgb_obj = srgb_compare.material_collection
             srgb_rgb = srgb_obj.colour_df[['R', 'G', 'B']].to_numpy()
             srgb_xyY = srgb_obj.colour_df[['x', 'y', 'Y']].to_numpy()
-            srgb_cats = srgb_obj.colour_df['Category']
+            srgb_groupby = srgb_obj.colour_df[groupby] # TBD if this works
             title_sfx = f"sRGB vs. {title_sfx}"
 
         # ***Configure Page Layout(s) and Matplotlib Figure(s)***
         # Parse through the complete spectral library to count
-        # the number of pages needed and the distribution of the categories
-        # and mineral groups over the columns and rows of each page.
+        # the number of pages needed and the distribution of the scope
+        # and 'groupbys' over the columns and rows of each page.
 
         # define page settings
         N_rows = 8 # max number of rows allowed for 1 page  (1 fig)
         N_cols = 6 # max number of columns allowed for 1 page (1 fig)
         spacing = 1.0 # space in inches between rows and columns
 
-        # initiate category counter dicts
-        cat_ns = {}     # dict of entries in each category        
-        cat_cols = {}   # dict of columns needed for each category
-        cat_rows = {}   # dict of rows needed for each category
-        t_rows = 0 # counter of total number of rows needed for all categories
-
-        # populate category counters
+        # initiate groupby counter dicts
+        gby_ns = {}     # dict of entries in each groupby
+        gby_cols = {}   # dict of columns needed for each groupby
+        gby_rows = {}   # dict of rows needed for each groupby
+        t_rows = 0 # counter of total number of rows needed for all groupbys
         
+        # select the scope and groupby data subset
         # handle noise
         if self.spectra_obj.noisy:
             data_df = self.spectra_obj.noiseless_df
-            index = data_df.index
-            cats = data_df['Category'][index]
         else:
-            index = self.spectra_obj.main_df.index
-            cats = self.spectra_obj.main_df['Category'][index]
+            data_df = self.spectra_obj.main_df
+
+        index = data_df.index
+        gbys = data_df[groupby][index].astype('category')
         
-        for cat in cats.unique():
-            cat_n = len(cats[cats == cat]) # number of entries in given category
-            cat_ns[cat] = cat_n # dict lookup of # entries in category
-            if cat_n >= N_cols: # if there are more entries than columns...
-                cat_cols[cat] = N_cols  # ...set number of columns to N_cols
+        # populate groupby counters
+        for gby in gbys.unique():
+            gby_n = len(gbys[gbys == gby]) # number of entries in given groupby
+            gby_ns[gby] = gby_n # dict lookup of # entries in groupby
+            if gby_n >= N_cols: # if there are more entries than columns...
+                gby_cols[gby] = N_cols  # ...set number of columns to N_cols
                  # compute the number of rows needed given the fixed # columns
-                cat_rows[cat] = int(np.ceil(cat_n / N_cols))
+                gby_rows[gby] = int(np.ceil(gby_n / N_cols))
             else: # otherwise the number of columns is the number of entries
-                cat_cols[cat] = cat_n 
-                cat_rows[cat] = 1 # and the number of rows is 1                        
-            t_rows += cat_rows[cat] # running total of rows needed for all categories
+                gby_cols[gby] = gby_n 
+                gby_rows[gby] = 1 # and the number of rows is 1                        
+            t_rows += gby_rows[gby] # running total of rows needed for all groupbys
 
         N_pages = 1 + (t_rows-1) // N_rows # number of pages needed to plot all
         
-        # Build a map of distribution of categories and entries across the pages
-        page_cats = {} # dict of pages with categories and entry indices
+        # Build a map of distribution of groupbys and entries across the pages
+        page_gbys = {} # dict of pages with groupbys and entry indices
         page = 0
-        cat_list = cats.unique().to_list()
-        cat = cat_list.pop()
-        cat_rows_left = cat_rows[cat]
-        i = 0 # initialise the first index of the category
-        f = 0 # initialise the last index of the category
-        page_cats[page] = {} # initialise the first page cat dictionary
+        gby_list = gbys.unique().to_list()
+        gby = gby_list.pop()
+        gby_rows_left = gby_rows[gby]
+        i = 0 # initialise the first index of the groupby
+        f = 0 # initialise the last index of the groupby
+        page_gbys[page] = {} # initialise the first page gby dictionary
         page_rows = 0
         
         rows_used = 0  # count the used rows of the page
         # if it hits N_rows, then move to next page
         while rows_used < t_rows:  # stop when every row is rendered                     
-            if cat_rows_left + page_rows < N_rows: 
-                # if the rest of the category fits on the page,
-                # add the category to the page
-                f = i + cat_rows_left*N_cols - 1
-                page_cats[page][cat] = (i,f)
-                page_rows += cat_rows_left
-                rows_used += cat_rows_left
+            if gby_rows_left + page_rows < N_rows: 
+                # if the rest of the groupby fits on the page,
+                # add the groupby to the page
+                f = i + gby_rows_left*N_cols - 1
+                page_gbys[page][gby] = (i,f)
+                page_rows += gby_rows_left
+                rows_used += gby_rows_left
                 if f < i:                    
-                    raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
-                if len(cat_list) > 0:
-                    cat = cat_list.pop()
-                    cat_rows_left = cat_rows[cat]
+                    raise ValueError(f'Contact sheet counting error for p. {page} {gby}: f < i')
+                if len(gby_list) > 0:
+                    gby = gby_list.pop()
+                    gby_rows_left = gby_rows[gby]
                     i = 0                
-            elif cat_rows_left + page_rows == N_rows: 
-                # if the rest of the category fills the page,
-                # add the category to the page
-                f = i + cat_rows_left*N_cols - 1
-                page_cats[page][cat] = (i,f)
-                page_rows += cat_rows_left
-                rows_used += cat_rows_left
+            elif gby_rows_left + page_rows == N_rows: 
+                # if the rest of the groupby fills the page,
+                # add the groupby to the page
+                f = i + gby_rows_left*N_cols - 1
+                page_gbys[page][gby] = (i,f)
+                page_rows += gby_rows_left
+                rows_used += gby_rows_left
                 if f < i:
-                    raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
-                if len(cat_list) > 0:
-                    cat = cat_list.pop()
-                    cat_rows_left = cat_rows[cat]
+                    raise ValueError(f'Contact sheet counting error for p. {page} {gby}: f < i')
+                if len(gby_list) > 0:
+                    gby = gby_list.pop()
+                    gby_rows_left = gby_rows[gby]
                     i = 0
                 if rows_used < t_rows:
                     page += 1
                     page_rows = 0
-                    page_cats[page] = {}
-            elif cat_rows_left + page_rows > N_rows: 
-                # if the rest of the category does not fit on the page,
+                    page_gbys[page] = {}
+            elif gby_rows_left + page_rows > N_rows: 
+                # if the rest of the groupby does not fit on the page,
                 # only use rows up to total of N_rows
-                cat_r = N_rows - page_rows # the number of rows available
-                f = i + cat_r*N_cols - 1
-                cat_rows_left -= cat_r
-                rows_used += cat_r
-                page_rows += cat_r
-                page_cats[page][cat] = (i,f)
+                gby_r = N_rows - page_rows # the number of rows available
+                f = i + gby_r*N_cols - 1
+                gby_rows_left -= gby_r
+                rows_used += gby_r
+                page_rows += gby_r
+                page_gbys[page][gby] = (i,f)
                 if f < i:
-                    raise ValueError(f'Contact sheet counting error for p. {page} cat. {cat}: f < i')
+                    raise ValueError(f'Contact sheet counting error for p. {page} {gby}: f < i')
                 page += 1
                 page_rows = 0
-                page_cats[page] = {}
+                page_gbys[page] = {}
                 i = f + 1
 
         # ***Render the Colour Contact Sheet according to the above mapping***
@@ -2053,16 +2043,16 @@ class SpectralLibraryAnalyser():
             
             # *** Formatting the page of the figure ***
             
-            # get the categories on the page
-            cats_on_page = list(page_cats[page].keys())
+            # get the groupby on the page
+            gbys_on_page = list(page_gbys[page].keys())
 
             # get the total number of rows used on the page
             rows_used = 0
-            for cat in cats_on_page:    
-                page_cat_i = page_cats[page][cat][0]
-                page_cat_f = page_cats[page][cat][1]
-                cat_rows_used = int((page_cat_f - page_cat_i + 1) / N_cols)
-                rows_used += cat_rows_used
+            for gby in gbys_on_page:    
+                page_gby_i = page_gbys[page][gby][0]
+                page_gby_f = page_gbys[page][gby][1]
+                gby_rows_used = int((page_gby_f - page_gby_i + 1) / N_cols)
+                rows_used += gby_rows_used
             
             # draw figure on page
             fig = plt.figure(
@@ -2074,56 +2064,56 @@ class SpectralLibraryAnalyser():
             # *** Drawing the figure on the page ***
 
             r = 0 # initialise the row counter
-            for c, cat in enumerate(cats_on_page):
+            for c, gby in enumerate(gbys_on_page):
                 
                 # use scatterplot to distribute entries evenly over the N_cols 
                 # and N_rows of the grid.
 
-                # get the index of the samples in this category    
-                i = page_cats[page][cat][0]
-                f = page_cats[page][cat][1]
+                # get the index of the samples in this groupby    
+                i = page_gbys[page][gby][0]
+                f = page_gbys[page][gby][1]
                 if self.spectra_obj.noisy:
                     colour_df = self.spectra_obj.colour_df[conditions['label']]
                     labeled_colour_df = pd.concat([self.spectra_obj.get_hdr_df(), colour_df], axis=1)
                     data_df = self.spectra_obj.colour_df.groupby('Root Data ID', level=0).mean(numeric_only=True)
-                    cat_index = self.spectra_obj.noiseless_df['Category'] == cat
-                    cat_df = data_df[cat_index]
+                    gby_index = self.spectra_obj.noiseless_df[groupby] == gby
+                    gby_df = data_df[gby_index]
                 else:
-                    cat_df = self.spectra_obj.colour_df[self.spectra_obj.main_df['Category'] == cat]                
-                cat_rgb = cat_df[conditions['label']][['R', 'G', 'B']].iloc[i:f+1]
+                    gby_df = self.spectra_obj.colour_df[self.spectra_obj.main_df[groupby] == gby]                
+                gby_rgb = gby_df[conditions['label']][['R', 'G', 'B']].iloc[i:f+1]
                 
-                # get the number of rows used by this category
-                cat_r = int((f - i + 1) / N_cols)
+                # get the number of rows used by this groupby
+                gby_r = int((f - i + 1) / N_cols)
 
-                # add a subplot for the category
-                ax_c = fig.add_subplot(spec[r:r+cat_r, :], adjustable='box')
+                # add a subplot for the groupby
+                ax_c = fig.add_subplot(spec[r:r+gby_r, :], adjustable='box')
 
-                r += cat_r
+                r += gby_r
 
-                # get the index of the comparison samples in this category
+                # get the index of the comparison samples in this groupby
                 if srgb_compare and self.obj_type == 'observation':
                     srgb_obj = srgb_compare.material_collection
-                    srgb_cat_df = srgb_obj.colour_df[srgb_obj.colour_df['Category'] == cat]
-                    srgb_cat_rgb = srgb_cat_df[['R', 'G', 'B']].iloc[i:f+1]                
+                    srgb_gby_df = srgb_obj.colour_df[srgb_obj.colour_df[groupby] == gby]
+                    srgb_gby_rgb = srgb_gby_df[['R', 'G', 'B']].iloc[i:f+1]                
 
-                for i, entry in enumerate(cat_rgb.index):
+                for i, entry in enumerate(gby_rgb.index):
                     
-                    x = i % cat_cols[cat] + 0.5
-                    y = np.ceil(i // cat_cols[cat]) + 0.5
+                    x = i % gby_cols[gby] + 0.5
+                    y = np.ceil(i // gby_cols[gby]) + 0.5
 
                     if srgb_compare and self.obj_type == 'observation':
-                        srgb_col = srgb_cat_rgb.loc[entry].to_numpy()
+                        srgb_col = srgb_gby_rgb.loc[entry].to_numpy()
                         ax_c.scatter(x-0.15,y,
                                         color=srgb_col,
                                         s=200,
                                         edgecolor='black')
-                        col = cat_rgb.loc[entry].to_numpy()
+                        col = gby_rgb.loc[entry].to_numpy()
                         ax_c.scatter(x+0.15,y,
                                         color=col,
                                         s=200,
                                         edgecolor='black')
                     else:
-                        col = cat_rgb.loc[entry].to_numpy()
+                        col = gby_rgb.loc[entry].to_numpy()
                         ax_c.scatter(x,y,
                                         color=col,
                                         s=200,
@@ -2139,13 +2129,13 @@ class SpectralLibraryAnalyser():
                                      fontsize=cfg.LEGEND_S, 
                                      ha='center', va='top')
                 # remove the axes
-                ax_c.set_xlim(0, cat_cols[cat], auto=False)
-                ax_c.set_ylim(0, cat_r, auto=False)
+                ax_c.set_xlim(0, gby_cols[gby], auto=False)
+                ax_c.set_ylim(0, gby_r, auto=False)
                 ax_c.invert_yaxis()
                 ax_c.set_aspect('equal', adjustable='box', share=True)
                 ax_c.axis('off')
                 # set title
-                ax_c.set_title(str.capitalize(cat), 
+                ax_c.set_title(gby.title(), 
                                fontsize=cfg.TITLE_S, 
                                y = 1.0, 
                                verticalalignment= 'bottom', 
@@ -2403,6 +2393,7 @@ class SpectralLibraryAnalyser():
         return fig, ax
 
     def render_xy_chromaticity_diagram(self,
+            conditions: Dict,
             scope: Literal[
                 'all',
                 'libraries', # one plot for each library used
@@ -2421,8 +2412,7 @@ class SpectralLibraryAnalyser():
                 'Species', # hue/style by species
                 'Sample ID', # hue/style by Sample ID
                 'Data ID' # hue/style by Data ID
-                ]='Category',
-            conditions: Dict,
+                ]='Category', 
             ax: plt.Axes=None) -> Tuple[plt.figure, plt.axes]:
         """Render the xy chromaticity diagram of the spectral library for 
         the given conditions.
@@ -2743,17 +2733,7 @@ class SpectralLibraryAnalyser():
         return fig, ax
 
     def render_colour(self, 
-            conditions: Dict,
-            scope: Literal[
-                    'all',
-                    'libraries', # one plot for each library used
-                    'categories', # one plot for each category
-                    'groups', # one plot for each group
-                    'subgroups', # one plot for each subgroup
-                    'species', # one plot for each species
-                    'samples', # one plot for each sample
-                    str # for specific category, group, subgroup, species, or sample
-                    ]='all',         
+            conditions: Dict,       
             groupby: Literal[
                     'Library', # hue/style by library
                     'Category', # hue/style by category
@@ -2802,9 +2782,7 @@ class SpectralLibraryAnalyser():
         # ----------------------------------------------------------------------
         if colour_contact_sheet:
             # render the colour contact sheet
-            figs_cs, axes_cs = self.render_colour_contact_sheet(conditions,
-                                                                scope=scope,
-                                                                groupby=groupby)
+            figs_cs, axes_cs = self.render_colour_contact_sheet(conditions, groupby)
         
         # ----------------------------------------------------------------------
         # prepare the figure(s) of the colourspace plots
@@ -2852,7 +2830,7 @@ class SpectralLibraryAnalyser():
             ax = fig.add_subplot(spec[i], projection='3d')
             fig_rgb, ax_rgb = self.render_rgb_cube(
                                             conditions, 
-                                            scope, 
+                                            
                                             groupby, 
                                             ax=ax)            
             fig_label = chr(ord('@')+i+1)
@@ -2862,7 +2840,7 @@ class SpectralLibraryAnalyser():
             ax = fig.add_subplot(spec[i], projection='3d')
             fig_XYZ, ax_XYZ = self.render_XYZ_cube(
                                             conditions, 
-                                            scope, 
+                                            
                                             groupby, 
                                             ax=ax)            
             fig_label = chr(ord('@')+i+1)
@@ -2872,7 +2850,7 @@ class SpectralLibraryAnalyser():
             ax = fig.add_subplot(spec[i], projection='3d')
             fig_xyY, ax_xyY = self.render_xyY_cube(
                                             conditions, 
-                                            scope, 
+                                            
                                             groupby, 
                                             ax=ax)            
             fig_label = chr(ord('@')+i+1)
@@ -2890,7 +2868,7 @@ class SpectralLibraryAnalyser():
                 dpi=cfg.DPI,
                 axes=ax
                 )
-            fig_xy, ax_xy = self.render_xy_chromaticity_diagram(conditions, scope, groupby, ax=ax)    
+            fig_xy, ax_xy = self.render_xy_chromaticity_diagram(conditions, groupby, ax=ax)    
             # remove title
             fig_label = chr(ord('@')+i+1)
             ax.set_title(fig_label+'. CIE Chromaticity Diagram', fontsize=cfg.LEGEND_S)        
@@ -2899,7 +2877,7 @@ class SpectralLibraryAnalyser():
             ax = fig.add_subplot(spec[i], projection='3d')
             fig_Lab, ax_Lab = self.render_Lab_cube( 
                                                 conditions, 
-                                                scope, 
+                                                
                                                 groupby, 
                                                 ax=ax)
             fig_label = chr(ord('@')+i+1)
@@ -2909,7 +2887,7 @@ class SpectralLibraryAnalyser():
             ax = fig.add_subplot(spec[i], projection='polar')
             fig_Ch, ax_Ch = self.render_Chab_plane(
                                                 conditions, 
-                                                scope, 
+                                                
                                                 groupby, 
                                                 ax=ax)
             fig_label = chr(ord('@')+i+1)

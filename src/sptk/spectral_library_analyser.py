@@ -313,6 +313,10 @@ class SpectralLibraryAnalyser():
         :type hires_under: bool, optional
         """
 
+        # if scope is a list, concat to a single string
+        if isinstance(scope, list):
+            scope = ', '.join(scope)
+
         # set title and filename
         if scope == 'all':
             title = 'All Entries by ' + groupby
@@ -582,6 +586,10 @@ class SpectralLibraryAnalyser():
                             defaults to False
         :type hires_under: bool, optional
         """
+
+        # if scope is a list, concat to a single string
+        if isinstance(scope, list):
+            scope = ', '.join(scope)
 
         # set title and filename
         if scope == 'all':
@@ -988,7 +996,7 @@ class SpectralLibraryAnalyser():
             continuum_removed = False
 
         # Plot the entire material collection in one figure
-        if scope == 'all':
+        if isinstance(scope, str) and scope == 'all':
 
             subset_df = self.spectra_obj.main_df
             refl_df = subset_df.loc[:, self.spectra_obj.wvls[0]:]
@@ -1034,7 +1042,7 @@ class SpectralLibraryAnalyser():
             return fig, ax
         
         # Plot each 'scope' collection in a separate plot
-        elif scope in scope_dict.keys():
+        elif isinstance(scope, str) and scope in scope_dict.keys():
             
             # get the list of unique values for the scope
             scope_label = scope_dict[scope]
@@ -1139,16 +1147,12 @@ class SpectralLibraryAnalyser():
         
         # Plot the given scope collection in one figure
         else:
+            if isinstance(scope, str):
+                scope = [scope]
 
-            # find the scope label for the given scope string
-            scope_labels = ['Library', 'Category', 'Group', 'Subgroup', 'Species', 'Sample ID']
-            scope_label = None
-            for label in scope_labels:
-                if scope in self.spectra_obj.main_df[label].unique().tolist():
-                    scope_label = label
-            if scope_label is None:
-                raise ValueError(f"Scope {scope} not found in dataset. Note that search is case sensitive.")
-            subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df[scope_label]==scope]
+            subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df.isin(scope).any(axis=1)]
+
+            # subset_df = self.spectra_obj.main_df[self.spectra_obj.main_df[scope_label]==scope]
             refl_df = subset_df.loc[:, self.spectra_obj.wvls[0]:]
             # get the category and group labels
             groupby_df = subset_df.loc[:, groupby]
@@ -1162,16 +1166,35 @@ class SpectralLibraryAnalyser():
 
             # update to write figure here
             fig, ax = self.setup_plot(all_df, groupby, stacked)
-            
-            ax = self.render_profile_plot(
-                        all_df,
-                        ax,
-                        scope=scope,
-                        groupby=groupby,
-                        stacked=stacked,
-                        pad_factor=pad_factor,
-                        hires_under=hires_under,
-                        ci=ci)
+
+            if waterfall:
+                ax = self.render_waterfall(
+                            all_df,
+                            ax,
+                            scope=scope,
+                            groupby=groupby,
+                            ci=ci)
+            else:
+                ax = self.render_profile_plot(
+                            all_df,
+                            ax,
+                            scope=scope,
+                            groupby=groupby,
+                            stacked=stacked,
+                            pad_factor=pad_factor,
+                            hires_under=hires_under,
+                            ci=ci)
+
+
+            # ax = self.render_profile_plot(
+            #             all_df,
+            #             ax,
+            #             scope=scope,
+            #             groupby=groupby,
+            #             stacked=stacked,
+            #             pad_factor=pad_factor,
+            #             hires_under=hires_under,
+            #             ci=ci)
             # remove the given title
             ax.set_title('')
             axes.append(ax)
@@ -1225,6 +1248,10 @@ class SpectralLibraryAnalyser():
         else:
             out_dir = Path(self.spectra_obj.object_dir / 'plots')
             out_dir.mkdir(parents=True, exist_ok=True)
+
+        if isinstance(scope, list):
+            scope = ', '.join(scope)
+
 
         # set figure filename and title
         if scope == 'all':

@@ -2074,13 +2074,13 @@ class SpectralLibraryAnalyser():
                 f = page_gbys[page][gby][1]
                 if self.spectra_obj.noisy:
                     colour_df = self.spectra_obj.colour_df[conditions['label']]
-                    labeled_colour_df = pd.concat([self.spectra_obj.get_hdr_df(), colour_df], axis=1)
-                    data_df = self.spectra_obj.colour_df.groupby('Root Data ID', level=0).mean(numeric_only=True)
+                    labeled_colour_df = pd.concat([self.spectra_obj.main_df['Root Data ID'], colour_df], axis=1)
+                    data_df = labeled_colour_df.groupby('Root Data ID').mean(numeric_only=True)
                     gby_index = self.spectra_obj.noiseless_df[groupby] == gby
                     gby_df = data_df[gby_index]
                 else:
-                    gby_df = self.spectra_obj.colour_df[self.spectra_obj.main_df[groupby] == gby]                
-                gby_rgb = gby_df[conditions['label']][['R', 'G', 'B']].iloc[i:f+1]
+                    gby_df = self.spectra_obj.colour_df[conditions['label']][self.spectra_obj.main_df[groupby] == gby]                
+                gby_rgb = gby_df[['R', 'G', 'B']].iloc[i:f+1]
                 
                 # get the number of rows used by this groupby
                 gby_r = int((f - i + 1) / N_cols)
@@ -2121,8 +2121,7 @@ class SpectralLibraryAnalyser():
                     
                     # annotate                                                            
                     entry = str(entry).replace('_', '\n') # turn underscore into carriage return
-                    entry = str(entry).replace(' ', '\n') # get Species
-                    entry = entry.title() 
+                    entry = str(entry).replace(' ', '\n') # get Species                    
                     ax_c.annotate(entry, (x, y), 
                                      (0,-1.5), 
                                      textcoords='offset fontsize', 

@@ -82,6 +82,7 @@ MICA_SET = {
         ('illite', '*'),
         ('nontronite', '*'),
         ('saponite', '*'),
+        ('vermiculite', '*'),
         ('talc', '*'),
         ('serpentine', '*'),
         ('chlorite', '*')

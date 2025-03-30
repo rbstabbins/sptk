@@ -1580,6 +1580,9 @@ class SpectralLibraryAnalyser():
         for filt in filter_ids:
             normed_filter_profile = transmission.loc[filt].to_numpy() / transmission.loc[filt].max()
             ax.plot(wvls, normed_filter_profile, color=cols.pop(0), label=filt, lw=0.8)
+        # set the tick label font to be arial
+        for label in (ax.get_xticklabels() + ax.get_yticklabels()):
+            label.set_fontname('Arial')
         ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
@@ -1624,10 +1627,13 @@ class SpectralLibraryAnalyser():
         cols = ['r', 'g', 'b']
         for profile in profiles.transpose():
             ax.plot(wvls, profile, color=cols.pop(0), label=labels.pop(0), lw=0.8)
-        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
-        ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S)
+        # set the tick label font to be arial
+        for label in (ax.get_xticklabels() + ax.get_yticklabels()):
+            label.set_fontname('Arial')
+        ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S, fontname='Futura')
+        ax.set_ylabel('Spectral Response', fontsize=cfg.LABEL_S, fontname='Futura')
         ax.legend(loc='upper right', fontsize=cfg.LEGEND_S)
-        ax.set_title(cmf_label, fontsize=cfg.LABEL_S)
+        ax.set_title(cmf_label, fontsize=cfg.LABEL_S, fontname='Futura')
 
         # fig.tight_layout()
 
@@ -2217,6 +2223,9 @@ class SpectralLibraryAnalyser():
                 mrkr.set_markeredgecolor(cat_rgb[e,:])
                 stem.set_color(cat_rgb[e,:])                
                 base.set_color(cat_rgb[e,:])
+                # set the tick label font to be arial
+        for label in (ax.get_xticklabels() + ax.get_yticklabels() + ax.get_zticklabels()):
+            label.set_fontname('Arial')
         ax.set_xlabel('B', color='blue', fontsize=cfg.LEGEND_S)
         ax.tick_params(axis='x', colors='blue', labelsize=cfg.LEGEND_S)
         ax.set_ylabel('R', color='red', fontsize=cfg.LEGEND_S)
@@ -2295,6 +2304,8 @@ class SpectralLibraryAnalyser():
                         marker=sym, 
                         alpha=0.9,
                         label=cat)
+        for label in (ax.get_xticklabels() + ax.get_yticklabels() + ax.get_zticklabels()):
+            label.set_fontname('Arial')
         ax.set_xlabel('X', fontsize=cfg.LEGEND_S)
         ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
         ax.set_ylabel('Y', fontsize=cfg.LEGEND_S)
@@ -2373,6 +2384,8 @@ class SpectralLibraryAnalyser():
                 markerline.set_markeredgecolor(cat_rgb[e,:])
                 stemlines.set_color(cat_rgb[e,:])                
                 baseline.set_color(cat_rgb[e,:])
+        for label in (ax.get_xticklabels() + ax.get_yticklabels() + ax.get_zticklabels()):
+            label.set_fontname('Arial')
         ax.set_xlabel('x', fontsize=cfg.LEGEND_S)
         ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
         ax.set_ylabel('y', fontsize=cfg.LEGEND_S)
@@ -2479,23 +2492,33 @@ class SpectralLibraryAnalyser():
 
         if len(labels) > 20:
             labels = uniq_cats.categories.to_list()
+            labels = [label.title() for label in labels]
             # set the handle to the category symbol
             handles = [mpl.lines.Line2D([0], [0], 
                                 color='w', markeredgecolor='k', 
                                 marker=syms_list[i], markersize=6, 
-                                label=uniq_cats.categories.to_list()[i]) for i in np.arange(len(uniq_cats))]
+                                label=uniq_cats.categories.to_list()[i].title()) for i in np.arange(len(uniq_cats))]
 
         else:
             # insert category labels into the legend        
             for cat in uniq_cats:
                 cat_index = cats[cats == cat].index
                 cat_index = labels.index(cat_index[0])
-                labels.insert(cat_index, cat)
+                labels.insert(cat_index, cat.title())
                 handles.insert(cat_index, mpl.lines.Line2D([0], [0], 
-                                    color='w', marker='o', markersize=6, label=cat))
+                                    color='w', marker='o', markersize=6, label=cat.title()))
+
+        # set x and y limits
+        # ax.set_xlim(0, 0.95)
+        # ax.set_ylim(0, 0.85)
+        ax.set_xlim(np.min(sRGB_ps[:, 0]), np.max(sRGB_ps[:, 0]))
+        ax.set_ylim(np.min(sRGB_ps[:, 1]), np.max(sRGB_ps[:, 1]))
         
-        ax.legend(handles, labels, loc='upper right', fontsize=cfg.LEGEND_S-2)
+        ax.legend(handles, labels, fontsize=cfg.LEGEND_S-2)
         
+        for label in (ax.get_xticklabels() + ax.get_yticklabels()):
+            label.set_fontname('Arial')
+
         # set axes font sizes
         ax.set_xlabel('CIE $x$', fontsize=cfg.LABEL_S)
         ax.set_ylabel('CIE $y$', fontsize=cfg.LABEL_S)
@@ -2503,9 +2526,6 @@ class SpectralLibraryAnalyser():
         # set axes tick label font size
         ax.tick_params(axis='both', labelsize=cfg.LABEL_S)
 
-        # set x and y limits
-        ax.set_xlim(0, 0.95)
-        ax.set_ylim(0, 0.85)
 
         # reset title
         ax.set_title(f'{title_sfx}\n CIE 1931 Chromaticity Diagram', fontsize=cfg.LABEL_S)
@@ -2586,6 +2606,8 @@ class SpectralLibraryAnalyser():
                         marker=syms_list[i], 
                         alpha=0.9,
                         label=cat)
+        for label in (ax.get_xticklabels() + ax.get_yticklabels() + ax.get_zticklabels()):
+            label.set_fontname('Arial')
         ax.set_xlabel('a*', fontsize=cfg.LEGEND_S)
         ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
         ax.set_ylabel('b*', fontsize=cfg.LEGEND_S)
@@ -2724,6 +2746,8 @@ class SpectralLibraryAnalyser():
             # set radial axis font size
             ax.tick_params(axis='x', labelsize=cfg.LEGEND_S)
             ax.tick_params(axis='y', labelsize=cfg.LEGEND_S)
+            for label in (ax.get_xticklabels() + ax.get_yticklabels()):
+                label.set_fontname('Arial')
         ax.set_title(fr"{title_sfx}""\n CIE L*C*h(ab) Chroma "rf"($r$) hue ($\theta$) Plane", fontsize=cfg.LABEL_S)
         
         # fig.tight_layout()        

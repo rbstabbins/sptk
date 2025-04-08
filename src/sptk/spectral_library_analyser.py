@@ -376,6 +376,7 @@ class SpectralLibraryAnalyser():
             errobar = 'sd'
             units=None
             estimator='mean'
+            hue_flag = 'Root Data ID'
         else:
             units = 'Data ID'
             errobar = None
@@ -496,6 +497,7 @@ class SpectralLibraryAnalyser():
         if self.obj_type == 'observation':
             if ci:
                 title = title + ' Mean ± 1σ'
+                hue_flag = 'Data ID'
             # include the hi-res spectra that has been sampeld by the instrument
             if hires_under:
                 # find the scope label for the given scope string

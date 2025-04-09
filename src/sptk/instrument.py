@@ -375,7 +375,32 @@ class Instrument():
         # put snr after fwhms in dataframe
         snr_col = self.main_df.pop('snr')
         self.main_df.insert(2, 'snr', snr_col)
+
+    def set_opt_refl(self,
+                    refl_opt: Union[float, np.ndarray, List, Dict, pd.Series]) -> None:
+        """Set the reflectance value that the each channel of the instrument
+        is optimised for - i.e. the value at which the defined SNR is acheived 
+        at. Particularly important for framing spectral imagers like CaSSIS.
+
+        :param refl_opt: optimal reflectance values
+        :type refl_opt: Union[float, np.ndarray, List, Dict, pd.Series]
+        """
+        if isinstance(refl_opt, (float, int)):
+            # set all channels to the same snr
+            self.main_df['refl_opt'] = refl_opt
+        elif isinstance(refl_opt, (np.ndarray, list)):
+            # set each channel to the corresponding snr
+            self.main_df['refl_opt'] = refl_opt
+        elif isinstance(refl_opt, (Dict, pd.Series)):
+            # set each channel to the corresponding snr
+            self.main_df['refl_opt'] = refl_opt
+        else:
+            raise ValueError('Optimal Reflectance data type not recognised.')
         
+        # put optimal refl after snr in dataframe
+        refl_col = self.main_df.pop('refl_opt')
+        self.main_df.insert(3, 'refl_opt', refl_col)
+
     def get_trans_df(self) -> pd.DataFrame:
         """Return a copy of the transmission dataframe only
 
@@ -729,12 +754,12 @@ class Instrument():
 
         return fig, fwhm_ax
     
-    def plot_snr(self, subfig: plt.figure=None):
-        """Plot the signal-to-noise ratio of the instrument as a function
+    def plot_snr_max(self, subfig: plt.figure=None):
+        """Plot the max. signal-to-noise ratio of the instrument as a function
         of cwl
         """   
 
-        print('Plotting Signal-to-Noise Ratio...')
+        print('Plotting Maximum Signal-to-Noise Ratio...')
 
         if subfig is not None:
             snr_ax = subfig.add_subplot()
@@ -779,7 +804,7 @@ class Instrument():
         )
         
         snr_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
-        snr_ax.set_ylabel('Signal-to-Noise Ratio', fontsize=cfg.LABEL_S)
+        snr_ax.set_ylabel('Max. SNR', fontsize=cfg.LABEL_S)
         snr_ax.set_title(
                 f'{self.name.title()} Signal-to-Noise Ratio', fontsize=cfg.TITLE_S)
 
@@ -812,6 +837,87 @@ class Instrument():
             fig.savefig(output_file)
             print('Plots exported to '+str(Path(self.object_dir)))
 
+        return fig, snr_ax    
+
+    def plot_snr_r(self, subfig: plt.figure=None):
+        """Plot the signal-to-noise ratio of the instrument as a function
+        of reflectance
+        """   
+
+        print('Plotting Signal-to-Noise Ratio aas function of R...')
+
+        if subfig is not None:
+            snr_ax = subfig.add_subplot()
+            fig = subfig
+        else:
+            fltr_ax_size = (cfg.FIG_SIZE[0], cfg.FIG_SIZE[1])
+            fig, snr_ax = plt.subplots(figsize=fltr_ax_size, dpi=cfg.DPI)
+
+        # set up the plot
+        # use futura font
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = 'Futura'
+        sns.despine(right=True, top=True)
+
+        try:
+            snrs = self.main_df['snr'].to_numpy()
+            snr_max = np.nanmax(snrs)
+        except KeyError:
+            print('No SNR data available for this instrument.')
+            return fig, snr_ax
+
+        # set up according to optimal reflectance in each channel
+        if 'refl_opt' in self.main_df.columns:
+            refl_opt = self.main_df['refl_opt'].to_numpy()
+        else:
+            # assume optimised for reflectance of 1
+            refl_opt = [1.0] * len(self.filter_ids)
+
+        refl = np.linspace(0, 1, 100)
+        snr_r = np.outer(np.sqrt(refl), snrs).T
+
+        # snr_ax.set(
+        #     xbound=(refl[0], refl[-1]),
+        #     ybound=(0, 1.1*snr_max),
+        #     autoscale_on=False)
+
+        # get colour palette from the filter colours DataFrame
+        cwl_colours = self.filter_cols.to_numpy()        
+
+        for i, filter_id in enumerate(self.filter_ids):
+            
+            snr_ax.plot(
+                refl * refl_opt[i],
+                snr_r[i],
+                label=filter_id,
+                color=cwl_colours[i],
+                linewidth=0.6,
+                zorder=1
+            )
+
+        snr_ax.set_xlabel('Reflectance', fontsize=cfg.LABEL_S)
+        snr_ax.set_ylabel('SNR(R)', fontsize=cfg.LABEL_S)
+        snr_ax.set_title(
+                f'{self.name.title()} Signal-to-Noise Ratio', fontsize=cfg.TITLE_S)
+
+        # set legend font size
+        snr_ax.legend(fontsize=cfg.LEGEND_S)
+
+        snr_ax.grid(True, which='major',axis='both', lw=0.6)
+        snr_ax.grid(True, which='minor',axis='both', lw=0.3)
+
+        # Set the font name for axis tick labels to be Comic Sans
+        for tick in snr_ax.get_xticklabels():
+           tick.set_fontname("Arial")
+        for tick in snr_ax.get_yticklabels():
+            tick.set_fontname("Arial")
+
+        if subfig is None:
+            plt.tight_layout()
+            output_file = Path(self.object_dir, self.name+'_snr').with_suffix(cfg.PLT_FRMT)
+            fig.savefig(output_file)
+            print('Plots exported to '+str(Path(self.object_dir)))
+
         return fig, snr_ax     
 
     def plot_instrument_characteristics(self):
@@ -826,20 +932,29 @@ class Instrument():
         subfig[0][0], filter_ax = self.plot_filter_profiles(subfig[0][0])
         # add 'A.' to the title
         filter_ax.set_title('A. Transmission Profiles', fontsize=cfg.TITLE_S)
-        # add signal-to-noise ratio plot
-        subfig[0][1], snr_ax = self.plot_snr(subfig[0][1])
-        # add 'B.' to the title
-        snr_ax.set_title('B. Signal-to-Noise Ratio', fontsize=cfg.TITLE_S)
-        # add spectral resolution plot        
-        subfig[1][0], res_ax = self.plot_spectral_resolution(subfig[1][0])
-        # add 'C.' to the title
-        res_ax.set_title('C. Spectral Resolution', fontsize=cfg.TITLE_S)
-        # add fwhm plot
-        subfig[1][1], fwhm_ax = self.plot_fwhm(subfig[1][1])
-        # add 'D.' to the title
-        fwhm_ax.set_title('D. FWHM', fontsize=cfg.TITLE_S)
 
-        axes = [filter_ax, snr_ax, res_ax, fwhm_ax]
+        # add signal-to-noise ratio plot
+        subfig[1][0], snr_ax = self.plot_snr_max(subfig[1][0])
+        # add 'B.' to the title
+        snr_ax.set_title('B. Max. Signal-to-Noise Ratio', fontsize=cfg.TITLE_S)
+        
+        # add fwhm plot
+        subfig[0][1], fwhm_ax = self.plot_fwhm(subfig[0][1])
+        # add 'C.' to the title
+        fwhm_ax.set_title('C. FWHM', fontsize=cfg.TITLE_S)
+
+        # if insturment is not spectrometer, add the SNR vs R plot
+        if self.filter_ids[0][0] != 'S':
+            subfig[1][1], d_ax = self.plot_snr_r(subfig[1][1])
+            # add 'D.' to the title
+            d_ax.set_title('D. Signal-to-Noise Ratio vs Reflectance', fontsize=cfg.TITLE_S)
+        else:
+            # add spectral resolution plot        
+            subfig[1][1], d_ax = self.plot_spectral_resolution(subfig[1][1])
+            # add 'D.' to the title
+            d_ax.set_title('D. Spectral Resolution', fontsize=cfg.TITLE_S)
+        
+        axes = [filter_ax, snr_ax, fwhm_ax, d_ax]
 
         # activate the figure
         plt.figure(fig.number)

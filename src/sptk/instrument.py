@@ -457,13 +457,18 @@ class Instrument():
         """
         print('Plotting Instrument Transmission...')
 
-        if 'snr' in self.main_df.columns:
-            trans_df = pd.melt(self.main_df.reset_index(),
-                                id_vars=['cwl', 'fwhm', 'snr','filter_id'])
-        else:
-            trans_df = pd.melt(self.main_df.reset_index(),
-                                id_vars=['cwl', 'fwhm', 'filter_id'])
+        # if 'snr' in self.main_df.columns:
+        #     trans_df = pd.melt(self.main_df.reset_index(),
+        #                         id_vars=['cwl', 'fwhm', 'snr','filter_id'])
+        # else:
+        #     trans_df = pd.melt(self.main_df.reset_index(),
+        #                         id_vars=['cwl', 'fwhm', 'filter_id'])
             
+        wvl_lo_idx = self.main_df.columns.get_loc(self.wvls[0])
+        id_vars = self.main_df.iloc[:,:wvl_lo_idx].columns.to_list()
+        id_vars.append(self.main_df.index.name)
+        trans_df = pd.melt(self.main_df.reset_index(), id_vars=id_vars)
+
         if subfig is not None:
             fltr_ax = subfig.add_subplot()
             fig = subfig
@@ -895,7 +900,7 @@ class Instrument():
                 zorder=1
             )
 
-        snr_ax.set_xlabel('Reflectance', fontsize=cfg.LABEL_S)
+        snr_ax.set_xlabel('I/F', fontsize=cfg.LABEL_S)
         snr_ax.set_ylabel('SNR(R)', fontsize=cfg.LABEL_S)
         snr_ax.set_title(
                 f'{self.name.title()} Signal-to-Noise Ratio', fontsize=cfg.TITLE_S)

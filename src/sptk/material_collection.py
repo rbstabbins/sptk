@@ -327,6 +327,7 @@ class MaterialCollection():
         # add the group, subgroup, species to the main_df
         # put the Data ID as the index
         main_df.set_index('Data ID', inplace=True)
+        main_df.sort_values(by=['Category', 'Group', 'Subgroup', 'Species', 'Data ID'], inplace=True)
         print(f'Loading {len(main_df.index)} of entries complete.')
         return main_df
 
@@ -427,11 +428,13 @@ class MaterialCollection():
         hdr = hdr.rename({'Mineral Name': 'Species'})
 
         # replace 'Formula' with 'Composition'
-        hdr = hdr.rename({'Formula': 'Composition'})
+        # if composition is not in the header
+        if 'Composition' not in hdr.index:
+            hdr = hdr.rename({'Formula': 'Composition'})
 
         # extract data ID, species, subgroup, group and library
         path_parts = list(Path(filepath).parts)
-        data_id = path_parts[-1].split('.')[0]
+        data_id = Path(filepath).stem
         path_list = list(path_parts)
         # get to the directory tree
         while path_list.pop(0) != 'spectral_library': pass
@@ -468,6 +471,9 @@ class MaterialCollection():
 
         #  always use species + filename as Data ID
         # no don't do this - but make a label for it when plotting...
+        # if separated with underscores, drop the first entry
+        if data_id.split('_')[0].capitalize() == species.capitalize():
+            data_id = '_'.join(data_id.split('_')[1:])
         hdr.loc['Data ID'] = data_id + ' ' + species.capitalize()
         # should we be taking sample id from filename?
 

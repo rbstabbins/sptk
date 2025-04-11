@@ -67,6 +67,8 @@ class SpectralParameters():
         self.project_name = p_name
         self.object_dir = Path(self.project_dir / 'spectral_parameters')
 
+        self.noisy = self.observation.noisy
+
         if load_existing:
             existing_pkl_path = Path(self.object_dir, 'spectral_parameters.pkl')
             file_exists = os.path.isfile(existing_pkl_path)
@@ -209,7 +211,8 @@ class SpectralParameters():
         # create a multiindex for the sp_list
         sp_list = pd.MultiIndex.from_product([['Spectral Parameters'], sp_list])
         # label all other columns as 'Header' in multiindex
-        hdr_list = self.material_collection.header_list.copy()
+        end_idx = self.observation.main_df.columns.get_loc('Reflectance')
+        hdr_list = self.observation.main_df.columns[:end_idx]
         # add category at the front of the hdr list
         hdr_list.insert(0, 'Category')
         hdr_list = pd.MultiIndex.from_product([['Header'], hdr_list])
@@ -953,29 +956,28 @@ class SpectralParameters():
             'shoulder_height': 'RdBu'
         }
         
-        # average over mineral name - should be optional
-        # check for multiindex
-        if snr:
+        # handle noise
+        if self.noisy:
             if isinstance(self.main_df.columns, pd.MultiIndex):
-                min_list = self.main_df.groupby(('Header', 'Mineral Name')).mean(numeric_only=True).index
+                entries = self.main_df[('Header', 'Root Data ID')].unique()
             else:
-                min_list = self.main_df.groupby('Mineral Name').mean(numeric_only=True).index
-        else:    
-            if isinstance(self.main_df.columns, pd.MultiIndex):
-                min_list = self.main_df.index#groupby(('Header', 'Mineral Name')).mean(numeric_only=True).index
-            else:
-                min_list = self.main_df.index#.groupby('Mineral Name').mean(numeric_only=True).index
-        # # sort min_list
-        # short_mnrl_list = [mnrl.split('.')[0] for mnrl in min_list]
-        # # reapply this as the new index
-        # lut = pd.Series(data=min_list, index=short_mnrl_list)
-        
-        # sort_mnrl_list = sorted(short_mnrl_list, key = lambda sub : sub[-2:-1])
-        # sorted_index = lut[sort_mnrl_list]
+                entries = self.main_df['Root Data ID'].unique()
+        else:
+            entries = self.main_df.index
 
-        # min_list = sorted_index.values
+        # # check for multiindex
+        # if snr:
+        #     if isinstance(self.main_df.columns, pd.MultiIndex):
+        #         entries = self.main_df.groupby(('Header', 'Root Data ID')).mean(numeric_only=True).index
+        #     else:
+        #         entries = self.main_df.groupby('Root Data ID').mean(numeric_only=True).index
+        # else:    
+        #     if isinstance(self.main_df.columns, pd.MultiIndex):
+        #         entries = self.main_df.index#groupby(('Header', 'Mineral Name')).mean(numeric_only=True).index
+        #     else:
+        #         entries = self.main_df.index#.groupby('Mineral Name').mean(numeric_only=True).index
         
-        height = 2 + (20 + len(min_list)) * cfg.LABEL_S / 72.0 # height of axis in inches, from number of minerals plus padding for SP labels
+        height = 2 + (20 + len(entries)) * cfg.LABEL_S / 72.0 # height of axis in inches, from number of minerals plus padding for SP labels
         
         # set the plot vertical-horizontal ratios for each SP type
         ratios = [len(self.parse_sp_lbls(self.sp_list, sp_type)) 
@@ -1005,19 +1007,19 @@ class SpectralParameters():
             # check for multiindex
             if snr:
                 if isinstance(self.main_df.columns, pd.MultiIndex):
-                    sps_arr = self.main_df.groupby(('Header', 'Mineral Name')).mean(numeric_only=True)['Spectral Parameters']
-                    std_arr = self.main_df.groupby(('Header', 'Mineral Name')).std(numeric_only=True)['Spectral Parameters']
+                    sps_arr = self.main_df.groupby(('Header', 'Root Data ID'), sort=False).mean(numeric_only=True)['Spectral Parameters']
+                    std_arr = self.main_df.groupby(('Header', 'Root Data ID'), sort=False).std(numeric_only=True)['Spectral Parameters']
                 else:
-                    sps_arr = self.main_df.groupby('Mineral Name').mean(numeric_only=True)           
-                    std_arr = self.main_df.groupby('Mineral Name').std(numeric_only=True)
+                    sps_arr = self.main_df.groupby('Root Data ID', sort=False).mean(numeric_only=True)           
+                    std_arr = self.main_df.groupby('Root Data ID', sort=False).std(numeric_only=True)
                 sps_arr = sps_arr[sp_type_list].to_numpy() / std_arr[sp_type_list].to_numpy()
                 sps_arr = 20*np.log10(np.abs(sps_arr))
             else:    
                 if isinstance(self.main_df.columns, pd.MultiIndex):
-                    sps_arr = self.main_df['Spectral Parameters']#.groupby(('Header', 'Mineral Name')).mean(numeric_only=True)['Spectral Parameters']
+                    sps_arr = self.main_df.groupby(('Header', 'Root Data ID'), sort=False).mean(numeric_only=True)['Spectral Parameters']
                 else:
-                    sps_arr = self.main_df['Spectral Parameters']#.groupby('Mineral Name').mean(numeric_only=True)            
-                sps_arr = sps_arr[sp_type_list].loc[min_list].to_numpy()
+                    sps_arr = self.main_df.groupby('Root Data ID', sort=False).mean(numeric_only=True)
+                sps_arr = sps_arr[sp_type_list].loc[entries].to_numpy()
                 # sps_arr = sps_arr[sp_type_list].to_numpy()
 
             #if ratio, take log10   
@@ -1050,15 +1052,18 @@ class SpectralParameters():
                                vmin=vmin, vmax=vmax)
             
             # format coloured gridplot
+            # replace space with \n for labels
+            # entry_labels = [entry.replace(' ', '\n') for entry in entries]
+            entry_labels = entries
             ax[i].set_xticks(np.arange(len(sp_type_list)), minor=False)
-            ax[i].set_xticklabels(sp_type_list, rotation=90, ha='left', fontsize=cfg.LABEL_S)
-            ax[i].set_yticks(np.arange(len(min_list)), minor=False)
-            ax[i].set_yticklabels(min_list, fontsize=cfg.LABEL_S, va='baseline')                        
+            ax[i].set_xticklabels(sp_type_list, rotation=90, ha='left', fontsize=cfg.LEGEND_S)
+            ax[i].set_yticks(np.arange(len(entry_labels)), minor=False)
+            ax[i].set_yticklabels(entry_labels, fontsize=cfg.LEGEND_S, va='baseline')                        
             ax[i].set_aspect('equal')
             if len(sp_type_list) < 7:
-                sp_type_label = sp_type.replace('_', '\n').title().capitalize()
+                sp_type_label = sp_type.replace('_', '\n').title()
             else:
-                sp_type_label = sp_type.replace('_', ' ').title().capitalize()
+                sp_type_label = sp_type.replace('_', ' ').title()
             cbar = fig.colorbar(cax, ax=ax[i], 
                                 location='top',                                 
                                 pad=0.02,                          
@@ -1075,22 +1080,27 @@ class SpectralParameters():
         i+=1
         if include_colourspace and hasattr(self, 'colourspace_list'):
 
-            # min_list = self.material_collection.colour_df.index
+            # entries = self.material_collection.colour_df.index
             # add the colourspace to the plot
-            col_img = np.zeros((len(min_list), len(col_types), 3))
+            col_img = np.zeros((len(entries), len(col_types), 3))
 
             for c, col_type in enumerate(col_types):
                 if c == 0:
-                    col_arr = self.material_collection.colour_df[col_type].loc[min_list][['R', 'G', 'B']].to_numpy()
+                    col_df = self.material_collection.colour_df[col_type]
+                    col_arr = col_df.loc[entries][['R', 'G', 'B']].to_numpy()
                 else:
-                    col_arr = self.main_df[col_type].loc[min_list][['R', 'G', 'B']].to_numpy()
+                    col_df = self.main_df[['Header', col_type]]
+                    if self.noisy:
+                        col_arr = col_df.groupby(('Header', 'Root Data ID'), sort=False).mean(numeric_only=True).loc[entries, (col_type, ['R','B', 'G'])]
+                    else:    
+                        col_arr = col_df.loc[entries][['R', 'G', 'B']].to_numpy()
                 col_img[:, c, :] = col_arr
         
             # ensure imshow plot is aligned with the pcolor plots above
             cax = ax[i].imshow(col_img, 
                                interpolation='none', 
                                origin='lower',
-                               extent=[0, len(col_types), 0, len(min_list)]
+                               extent=[0, len(col_types), 0, len(entries)]
                                )
             # format coloured gridplot
             # align top with previous subplot            
@@ -1100,9 +1110,9 @@ class SpectralParameters():
                             'CaSSIS-2019 CIE 1964 10 Degree Standard Observer D65': 'CaSSIS-2019 Approx. sRGB'}
             col_types = [replace_dict.get(col, col) for col in col_types]
             ax[i].set_xticklabels(col_types, rotation=90, ha='left', fontsize=cfg.LABEL_S, va='top')
-            # ax[i].set_yticks(np.arange(len(min_list)), minor=False)
-            # min_labels = [min.replace('_', ' ').title().capitalize() for min in min_list]
-            # min_labels = [min.replace(' ', '\n').title().capitalize() for min in min_list]
+            # ax[i].set_yticks(np.arange(len(entries)), minor=False)
+            # min_labels = [min.replace('_', ' ').title().capitalize() for min in entries]
+            # min_labels = [min.replace(' ', '\n').title().capitalize() for min in entries]
             # ax[i].set_yticklabels(min_labels, fontsize=cfg.LABEL_S, va='baseline')                        
             ax[i].set_aspect('equal')
             # add gridlines

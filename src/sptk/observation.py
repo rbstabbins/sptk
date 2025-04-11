@@ -211,7 +211,7 @@ class Observation():
             self.noiseless_df = self.noiseless_df.copy()
         
         # access the observation dataframe and make duplicates of each entry
-        obs_df = pd.concat([self.noiseless_df].copy()*n_duplicates).sort_index()
+        obs_df = pd.concat([self.noiseless_df].copy()*n_duplicates).sort_index() # why are we sorting index here?
 
         # apply noise to the duplicate entries  
         if snr is None:
@@ -258,6 +258,7 @@ class Observation():
             toc = time.perf_counter()
             print(f"Noise added in {toc - tic:0.4f} seconds.")
             
+        obs_df.sort_values(by=['Category', 'Group', 'Subgroup', 'Species', 'Data ID'], inplace=True)    
         return obs_df
 
     # def remove_continuum(self) -> pd.DataFrame:

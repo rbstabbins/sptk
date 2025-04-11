@@ -95,10 +95,10 @@ class SpectralLibraryAnalyser():
         """        
         # apply offsets to reflectance
 
-        # sort categories by alphabetical order
+        # sort groupby by alphabetical order
         # get groupby from data_df
         groupby = data_df.columns[-1]
-        data_df = data_df.sort_values(by=[groupby, 'Data ID'], ascending=False)
+        # data_df = data_df.sort_values(by=[groupby, 'Data ID'], ascending=False)
 
         # reset index
         data_df = data_df.reset_index(drop=True)
@@ -458,14 +458,14 @@ class SpectralLibraryAnalyser():
                         annotation['label'].title(), 
                         # colour it the same as the line
                         color=handles[labels.index(annotation['label'])].get_color(),
-                        fontsize=cfg.LEGEND_S+1, 
+                        fontsize=cfg.LEGEND_S, 
                         va=annotation['va'])                 
                 else:
                     ax.text(
                         self.spectra_obj.wvls[-1]+20, 
                         annotation['level'], 
                         annotation['label'], 
-                        fontsize=cfg.LEGEND_S, 
+                        fontsize=cfg.LEGEND_S-1, 
                         va=annotation['va']) 
             ax.legend().remove()
         else:
@@ -621,7 +621,7 @@ class SpectralLibraryAnalyser():
             filename = inst + '_sampled_' + filename
 
         # prepare data frame for plotting
-        data_df = data_df.sort_values(by=[groupby, 'Data ID'], ascending=False)
+        # data_df = data_df.sort_values(by=[groupby, 'Data ID'], ascending=False)
         data_ids = data_df.index
         data_df = data_df.reset_index()
             
@@ -2214,7 +2214,8 @@ class SpectralLibraryAnalyser():
         for i, cat in enumerate(uniq_cats):
             cat_rgb = rgb[cats == cat]
             # plot each point in turn to give separate colour
-            sym = syms_list[cat_codes.loc[cat].unique()[0]]
+            cat_code = cat_codes.loc[cat]
+            sym = syms_list[cat_codes.loc[[cat]].unique()[0]]
             for e in range(cat_rgb.shape[0]):
                 mrkr, stem, base = ax.stem([cat_rgb[e,2]], 
                                             [cat_rgb[e,0]], 
@@ -2469,17 +2470,16 @@ class SpectralLibraryAnalyser():
         syms_list = ['o', 's', 'D', 'v', '^', '<', '>', 
                      'p', 'P', '*', 'X', 'd', 'h', 'H', '+', 'x', '|', '_']
 
-        min_list = index.to_list()
-        for i, min in enumerate(min_list):
+        entries = index.to_list()
+        for i, entry in enumerate(entries):
            
-            sym = syms_list[cat_codes.loc[min]]
-            swatch_name = f"{min}".capitalize()
+            sym = syms_list[cat_codes.loc[entry]]
                         
             xy = xyY[i, 0:2]
             x, y = xy
             ax.plot(x, y, 
                     f"{sym}", color=list(rgb[i]), 
-                    label=swatch_name, 
+                    label=entry, 
                     markeredgewidth=0.4,
                     markersize=4,
                     markeredgecolor='white')
@@ -2740,7 +2740,7 @@ class SpectralLibraryAnalyser():
         for i, cat in enumerate(uniq_cats):
             cat_LCh = LCh[cats == cat]
             cat_rgb = rgb[cats == cat]
-            sym = syms_list[cat_codes.loc[cat].unique()[0]]
+            sym = syms_list[cat_codes.loc[[cat]].unique()[0]]
             ax.scatter(np.deg2rad(cat_LCh[:,2]), cat_LCh[:,1], 
                         c=cat_rgb,
                         marker=sym, label=cat)

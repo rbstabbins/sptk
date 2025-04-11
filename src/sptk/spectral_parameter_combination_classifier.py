@@ -62,7 +62,11 @@ class SpectralParameterCombinationClassifier():
         self.sp_list = spectral_parameters.sp_list
         self.sp_filters = spectral_parameters.sp_filters
 
-        self.classes = spectral_parameters.main_df.Category.cat.categories
+        # if multiindex
+        if isinstance(spectral_parameters.main_df.columns, pd.MultiIndex):
+            self.classes = spectral_parameters.main_df[('Header', 'Category')].cat.categories    
+        else:
+            self.classes = spectral_parameters.main_df.Category.cat.categories
 
         if load_existing:
             existing_pkl_path = Path(self.object_dir,'spc_classifier.pkl')

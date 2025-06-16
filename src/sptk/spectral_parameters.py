@@ -642,15 +642,15 @@ class SpectralParameters():
         if cfg.TIME_IT:
             tic = time.perf_counter()
         print("Plotting Spectral Parameters...")
-        if self.chnl_lbls is not None:
+        if set(self.chnl_lbls).issubset(set(self.sp_list)):            
             self.gridplot_chnl_histograms()
-        if self.ratio_lbls is not None:
+        if set(self.ratio_lbls).issubset(set(self.sp_list)):
             self.gridplot_ratio_histograms()
-        if self.slope_lbls is not None:
+        if set(self.slope_lbls).issubset(set(self.sp_list)):
             self.gridplot_slope_histograms()
-        if self.band_depth_lbls is not None:
+        if set(self.band_depth_lbls).issubset(set(self.sp_list)):
             self.gridplot_band_depth_histograms()
-        if self.shoulder_height_lbls is not None:
+        if set(self.shoulder_height_lbls).issubset(set(self.sp_list)):
             self.gridplot_shoulder_height_histograms()
         if cfg.TIME_IT:
             toc = time.perf_counter()

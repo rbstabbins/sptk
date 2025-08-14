@@ -16,7 +16,7 @@ from pathlib import Path
 import glob
 from  shutil import rmtree
 import time
-from typing import Dict, List, Union
+from typing import Dict, List, Literal, Union
 import colour
 import pandas as pd
 import numpy as np
@@ -34,7 +34,7 @@ class Instrument():
             self,
             name: str,
             project_name: str = 'case',
-            shape: str='gauss',
+            shape: Literal['gauss', 'tophat', 'cauchy'] = 'gauss',
             load_existing: bool=cfg.LOAD_EXISTING,
             plot_profiles: bool = cfg.PLOT_PROFILES,
             export_df: bool = cfg.EXPORT_DF):
@@ -47,9 +47,14 @@ class Instrument():
         :type name: str
         :param project_name: name of project, defaults to 'case'
         :type project_name: str, optional
-        :param plot_profiles: plot material profiles, defaults to PLOT_PROFILES
+        :param shape: shape of the filter profile, defaults to 'gauss'
+        :type shape: Literal['gauss', 'tophat', 'cauchy'], optional
+        :param load_existing: load existing instrument DataFrame, defaults to
+            cfg.LOAD_EXISTING
+        :type load_existing: bool, optional
+        :param plot_profiles: plot material profiles, defaults to cfg.PLOT_PROFILES
         :type plot_profiles: bool, optional
-        :param export_df: export DataFrames, defaults to EXPORT_DF
+        :param export_df: export DataFrames, defaults to cfg.EXPORT_DF
         :type export_df: bool, optional
         """
         print('Building Instrument...')
@@ -113,14 +118,16 @@ class Instrument():
                 print(f"No {name} directory to delete.")
 
     def build_new_instrument(self,
-            shape: str='gauss',
+            shape: Literal['gauss', 'tophat', 'cauchy'] = 'gauss',
             plot_profiles: bool = cfg.PLOT_PROFILES,
             export_df: bool = cfg.EXPORT_DF) -> None:
         """Build DataFrame and optionally export and produce plots.
 
-        :param plot_profiles: plot material profiles, defaults to PLOT_PROFILES
+        :param shape: shape of the filter profile, defaults to 'gauss'
+        :type shape: Literal['gauss', 'tophat', 'cauchy'], optional
+        :param plot_profiles: plot material profiles, defaults to cfg.PLOT_PROFILES
         :type plot_profiles: bool, optional
-        :param export_df: export DataFrames, defaults to EXPORT_DF
+        :param export_df: export DataFrames, defaults to cfg.EXPORT_DF
         :type export_df: bool, optional
         """
         inst_data = Instrument.read_instrument_data(self.name)
@@ -222,7 +229,7 @@ class Instrument():
     @staticmethod
     def build_instrument_df(
             inst_df: pd.DataFrame, 
-            shape: str='gauss') -> pd.DataFrame:
+            shape: Literal['gauss', 'tophat', 'cauchy']='gauss') -> pd.DataFrame:
         """Builds instrument transmission profiles for filter cwls and fwhms
         using a Gaussian function, and returns in a DataFrame.
 
@@ -232,6 +239,8 @@ class Instrument():
 
         :param inst_df: Instrument filter names, cwls and fwhms
         :type inst_df: pd.DataFrame
+        :param shape: shape of the filter profile, defaults to 'gauss'
+        :type shape: Literal['gauss', 'tophat', 'cauchy'], optional
         :returns: the instrument transmission table
         :rtype: pd.DataFrame
         """
@@ -782,14 +791,18 @@ class Instrument():
         try:
             snrs = self.main_df['snr']
             snr_max = np.nanmax(snrs)
+            snr_min = np.nanmin(snrs)
         except KeyError:
             print('No SNR data available for this instrument.')
             return fig, snr_ax
 
         snr_ax.set(
             xbound=(cfg.SAMPLE_RES['wvl_min']-10, cfg.SAMPLE_RES['wvl_max']+10),
-            ybound=(0, 1.1*snr_max),
+            ybound=(0.5*snr_min, 2*snr_max),
             autoscale_on=False)
+
+        # set the y axis to log scale
+        snr_ax.set_yscale('log')
 
         # get colour palette from the filter colours DataFrame
         cwl_colours = self.filter_cols.to_numpy()        
@@ -806,8 +819,8 @@ class Instrument():
             snrs,
             'k--',
             zorder=0
-        )
-        
+        )                
+
         snr_ax.set_xlabel('Wavelength (nm)', fontsize=cfg.LABEL_S)
         snr_ax.set_ylabel('Max. SNR', fontsize=cfg.LABEL_S)
         snr_ax.set_title(
@@ -999,17 +1012,32 @@ class InstrumentBuilder:
             instrument_name: str,
             instrument_type: str,
             sampling: Union[int, str],
-            resolution: float,
-            spectral_range: List,
-            snr_range: List, # just specify the start and end SNR for now - simple
+            resolution: Union[List[float], pd.Series],
+            spectral_range: List[float],
+            snr: Union[List[float], pd.Series]
         ) -> None:
+        """Initiate the InstrumentBuilder object
+
+        :param instrument_name: Name of the instrument
+        :type instrument_name: str
+        :param instrument_type: Type of the instrument
+        :type instrument_type: str
+        :param sampling: Sampling information
+        :type sampling: Union[int, str]
+        :param resolution: Spectral resolution
+        :type resolution: Union[List[float], pd.Series]
+        :param spectral_range: Spectral range
+        :type spectral_range: List[float]
+        :param snr: Signal-to-noise ratio
+        :type snr: Union[List[float], pd.Series]
+        """        
 
         self.name = instrument_name
         self.instrument_type = instrument_type
         self.sampling = sampling
         self.resolution = resolution
         self.spectral_range = spectral_range
-        self.snr_range = snr_range
+        self.snr = snr
 
         self.main_df = self.build_instrument()
 
@@ -1097,18 +1125,32 @@ class InstrumentBuilder:
         else:
             raise ValueError('Sampling criteria not recognised')
 
+        # parse spectral resolution to the wavelength domain
+        if isinstance(self.resolution, float):
+            self.resolution = pd.Series(self.resolution, index=np.arange(start_cwl, end_cwl+1, 1))
+        # elif isinstance(self.resolution, pd.Series):
+            # ensure the resolution is in the same range as the cwls, by interpolation
+        cwls_in = self.resolution.index.to_numpy()
+        # because we generate the CWLs as a function of wavelength, all we really need here is the interpolation function, that will be called during the cwl population while loop.
+        fwhm_func = interp1d(cwls_in, self.resolution.to_numpy().flatten(), bounds_error=False, fill_value='extrapolate')
+
         cwl = start_cwl
         i = 1
         while cwl <= end_cwl:
             cwls.append(cwl)
-            fwhm = cwl / self.resolution
+            fwhm = cwl / fwhm_func(cwl)
             fwhms.append(fwhm)
             filter_id = f'S{i:03d}'
             filter_ids.append(filter_id)
             cwl = cwl + (fwhm * fwhm_si)     
             i+=1 
 
-        snrs = np.linspace(self.snr_range[0], self.snr_range[1], len(cwls))
+        # check the type of snr
+        if isinstance(self.snr, list):
+            snrs = np.linspace(self.snr_range[0], self.snr_range[1], len(cwls))
+        elif isinstance(self.snr, pd.Series):
+            # get the SNR series, and interpolate the wavelengths to the simulation range
+            snrs = np.interp(cwls, self.snr.index, self.snr.values)  
 
         inst_df = pd.DataFrame(data={
                                     'filter_id':filter_ids,

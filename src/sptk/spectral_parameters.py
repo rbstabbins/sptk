@@ -945,7 +945,19 @@ class SpectralParameters():
                           include_colourspace: bool = False,
                           snr: bool = False):
 
-        sp_types = SP_CODES.keys() # get the SP types
+        # sp_types = SP_CODES.keys() # get the SP types
+        # new - get sp_types list from the sp_list
+        sp_types = []
+        if set(self.chnl_lbls).issubset(set(self.sp_list)):
+            sp_types.append('channel')
+        if set(self.ratio_lbls).issubset(set(self.sp_list)):
+            sp_types.append('ratio')
+        if set(self.slope_lbls).issubset(set(self.sp_list)):
+            sp_types.append('slope')
+        if set(self.band_depth_lbls).issubset(set(self.sp_list)):
+            sp_types.append('band_depth')
+        if set(self.shoulder_height_lbls).issubset(set(self.sp_list)):
+            sp_types.append('shoulder_height')
 
         # define colormaps used to show distributions spectral parameter values
         sp_cmaps = {

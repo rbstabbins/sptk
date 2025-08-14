@@ -881,6 +881,19 @@ class MaterialCollection():
         self.main_df.transpose().to_csv(csv_out_file)
         pkl_out_file = Path(self.object_dir, 'material_collection.pkl')
         self.main_df.to_pickle(pkl_out_file)
+
+        # export to envi sli file
+        envi_sli_file = Path(table_path, 'material_collection')        
+        header = {
+                'wavelength': self.wvls, # np.ndarray of len n_bands,
+                'fwhm': np.empty(len(self.wvls)).fill(3.0), # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
+                'spectra names': self.main_df.index.to_list(), # use the data ids of the material collection
+                'wavelength units': 'nm' # the wavelength units used here.
+            }
+        spectra = self.get_refl_df().to_numpy()
+        obs_sli = envi.SpectralLibrary(data=spectra, header=header)
+        obs_sli.save(str(envi_sli_file))
+
         if cfg.TIME_IT:
             toc = time.perf_counter()
             print(f"Material Collection exported in {toc - tic:0.4f} seconds.")

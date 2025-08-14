@@ -22,6 +22,7 @@ import seaborn as sns
 from scipy import interpolate
 from sklearn import decomposition
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+import spectral.io.envi as envi
 from sptk.material_collection import MaterialCollection
 from sptk.instrument import Instrument
 from sptk.spectral_library_analyser import SpectralLibraryAnalyser
@@ -243,8 +244,13 @@ class Observation():
             np.random.seed(seed) # set the seed of the random distribution
         noise_array = np.random.normal(0.0, noise, obs_df[self.wvls].shape)
 
-        obs_df.loc[:, self.wvls] = obs_df.loc[:, self.wvls] + noise_array # update dataframe
-        obs_df.loc[:, self.wvls].clip(lower = 0.0, inplace=True) # clip to range
+        # add the noise_array to the dataframe, and use nan values where the noise_array is nan
+        obs_df.loc[:, self.wvls] = obs_df.loc[:, self.wvls] + noise_array
+        
+        # clip the reflectance values to the range [0,1]
+        # this is important to avoid negative reflectance values
+        # and values above 1.0, which are not physically meaningful
+        obs_df.loc[:, self.wvls] = obs_df.loc[:, self.wvls].clip(lower=0.0, upper=1.0)        
         # # update index for unique ids
         suffix = obs_df.groupby(level=0).cumcount().astype(str).replace('0','')        
         obs_df.insert(1, 'Root Data ID', obs_df.index)
@@ -939,14 +945,35 @@ class Observation():
         :type pkl_only: bool, optional
         """
         print('Exporting the Observation Pickle format...')
+
+        name = 'observation'
+
+        if self.noisy:
+            name += '_noisy'
+        if self.continuum_removed:
+            name += '_cr'
+
         table_dir = Path(self.object_dir / 'tables')
         table_dir.mkdir(parents=True, exist_ok=True)
 
-        pkl_file = Path(self.object_dir, 'observation.pkl')
+        pkl_file = Path(table_dir, f'{name}.pkl')
         self.main_df.to_pickle(pkl_file)
 
-        csv_out_file = Path(table_dir, 'observation.csv')
+        csv_out_file = Path(table_dir, f'{name}.csv')
         self.main_df.transpose().to_csv(csv_out_file)
+
+        # export to envi sli file
+        envi_sli_file = Path(table_dir, f'{name}')
+
+        header = {
+                'wavelength': self.instrument.cwls().to_numpy(), # np.ndarray of len n_bands,
+                'fwhm': self.instrument.fwhms().to_numpy(), # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
+                'spectra names': self.main_df.index.to_list(), # use the data ids of the material collection
+                'wavelength units': 'nm' # the wavelength units used here.
+            }
+        spectra = self.get_refl_df().to_numpy()
+        obs_sli = envi.SpectralLibrary(data=spectra, header=header)
+        obs_sli.save(str(envi_sli_file))
 
         # if average_duplicates:            
         #     csv_out_file = Path(table_dir, 'observation_error.csv')

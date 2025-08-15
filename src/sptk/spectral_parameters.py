@@ -642,7 +642,7 @@ class SpectralParameters():
         if cfg.TIME_IT:
             tic = time.perf_counter()
         print("Plotting Spectral Parameters...")
-        if set(self.chnl_lbls).issubset(set(self.sp_list)):            
+        if set(self.chnl_lbls).issubset(set(self.sp_list)):
             self.gridplot_chnl_histograms()
         if set(self.ratio_lbls).issubset(set(self.sp_list)):
             self.gridplot_ratio_histograms()
@@ -946,17 +946,17 @@ class SpectralParameters():
                           snr: bool = False):
 
         # sp_types = SP_CODES.keys() # get the SP types
-        # new - get sp_types list from the sp_list
+
         sp_types = []
         if set(self.chnl_lbls).issubset(set(self.sp_list)):
             sp_types.append('channel')
-        if set(self.ratio_lbls).issubset(set(self.sp_list)):
+        if self.ratio_lbls is not None:
             sp_types.append('ratio')
-        if set(self.slope_lbls).issubset(set(self.sp_list)):
+        if self.slope_lbls is not None:
             sp_types.append('slope')
-        if set(self.band_depth_lbls).issubset(set(self.sp_list)):
+        if self.band_depth_lbls is not None:
             sp_types.append('band_depth')
-        if set(self.shoulder_height_lbls).issubset(set(self.sp_list)):
+        if self.shoulder_height_lbls is not None:
             sp_types.append('shoulder_height')
 
         # define colormaps used to show distributions spectral parameter values

@@ -458,14 +458,14 @@ class SpectralLibraryAnalyser():
                         annotation['label'].title(), 
                         # colour it the same as the line
                         color=handles[labels.index(annotation['label'])].get_color(),
-                        fontsize=cfg.LEGEND_S, 
+                        fontsize=cfg.LEGEND_S+1, 
                         va=annotation['va'])                 
                 else:
                     ax.text(
                         self.spectra_obj.wvls[-1]+20, 
                         annotation['level'], 
                         annotation['label'], 
-                        fontsize=cfg.LEGEND_S-1, 
+                        fontsize=cfg.LEGEND_S, 
                         va=annotation['va']) 
             ax.legend().remove()
         else:

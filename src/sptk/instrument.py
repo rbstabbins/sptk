@@ -76,14 +76,20 @@ class Instrument():
                 self.main_df = pd.read_pickle(existing_pkl_path)
             else:
                 print('No existing DataFrame, building new for % r...' % name)
-                self.build_new_instrument(shape, plot_profiles, export_df)
+                self.build_new_instrument(shape)
         else:
             print("Building new DataFrame for % r..." % name)
-            self.build_new_instrument(shape, plot_profiles, export_df)
+            self.build_new_instrument(shape)
 
         self.filter_ids = self.main_df.index.to_list()
 
         self.filter_cols = self.set_filter_cols()
+
+        # optionally produce plots and files of the instrument
+        if plot_profiles:
+            self.plot_filter_profiles()
+        if export_df:
+            self.export_main_df()
 
         if cfg.TIME_IT:
             toc = time.perf_counter()
@@ -132,11 +138,6 @@ class Instrument():
         """
         inst_data = Instrument.read_instrument_data(self.name)
         self.main_df = Instrument.build_instrument_df(inst_data, shape=shape)
-        # optionally produce plots and files of the instrument
-        if plot_profiles:
-            self.plot_filter_profiles()
-        if export_df:
-            self.export_main_df()
 
     @staticmethod
     def read_instrument_data(name: str) -> pd.DataFrame:

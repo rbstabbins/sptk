@@ -809,7 +809,12 @@ class Observation():
 
     def get_refl_df(self,
             category: str = None,
-            mineral_name: str = None) -> pd.DataFrame:
+            library: str = None,
+            group: str = None,
+            subgroup: str = None,            
+            species: str = None,
+            sample_id: str = None,
+            root_data_id: str = None) -> pd.DataFrame:
         """Return a copy of the reflectance dataframe subset of the array.
         Allows for selection of data from specific category and mineral type.
 
@@ -820,33 +825,60 @@ class Observation():
         :return: reflectance data only of the material collection
         :rtype: pd.DataFrame
         """
-        subset_df = self.get_subset_df(category, mineral_name)
-        refl_df = subset_df.loc[:, self.wvls[0]:]
+        subset_df = self.get_subset_df(
+                            category, 
+                            library,
+                            group,
+                            subgroup,
+                            species,
+                            sample_id,
+                            root_data_id)
+        refl_df = subset_df.loc[:,self.wvls[0]:]
         return refl_df
 
     def get_subset_df(self,
             category: str = None,
-            mineral_name: str = None) -> pd.DataFrame:
+            library: str = None,
+            group: str = None,
+            subgroup: str = None,            
+            species: str = None,
+            sample_id: str = None,
+            root_data_id: str = None) -> pd.DataFrame:
         """Return a subset of the dataframe, according to selection
-        from specific category and mineral type.
+        from specific category and species.
 
         :param category: categorical subset of data, defaults to None
         :type category: str, optional
-        :param mineral_name: mineral subset of data, defaults to None
+        :param species: species subset of data, defaults to None
         :type mineral_name: str, optional
         :return: subset of dataframe according to category and mineral
         :rtype: pd.DataFrame
         """
-        if (category is not None) and (mineral_name is not None):
+        if (category is not None) and (species is not None):
             cat_mnrl_selection = (self.main_df.Category == category) & (
-                    self.main_df['Mineral Name'] == mineral_name)
+                    self.main_df['Species'] == species)
             subset_df = self.main_df.loc[cat_mnrl_selection,:]
         elif category is not None:
             cat_selection = self.main_df.Category == category
             subset_df = self.main_df.loc[cat_selection,:]
-        elif mineral_name is not None:
-            mnrl_selection = self.main_df['Mineral Name'] == mineral_name
+        elif library is not None:
+            lib_selection = self.main_df['Library'] == library
+            subset_df = self.main_df.loc[lib_selection,:]
+        elif group is not None:
+            group_selection = self.main_df['Group'] == group
+            subset_df = self.main_df.loc[group_selection,:]
+        elif subgroup is not None:
+            subgroup_selection = self.main_df['Subgroup'] == subgroup
+            subset_df = self.main_df.loc[subgroup_selection,:]
+        elif species is not None:
+            mnrl_selection = self.main_df['Species'] == species
             subset_df = self.main_df.loc[mnrl_selection,:]
+        elif sample_id is not None:
+            sample_selection = self.main_df['Sample ID'] == sample_id
+            subset_df = self.main_df.loc[sample_selection,:]
+        elif root_data_id is not None:
+            root_selection = self.main_df['Root Data ID'] == root_data_id
+            subset_df = self.main_df.loc[root_selection,:]
         else:
             subset_df = self.main_df
         return subset_df

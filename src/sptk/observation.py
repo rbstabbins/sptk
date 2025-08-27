@@ -177,11 +177,28 @@ class Observation():
     def add_noise(self,
             n_duplicates: int,            
             snr: Union[float, np.array]=None,   
-            spd: np.array = None,         
+            spd: Union[float, np.array] = None,         
             seed: int=None) -> pd.DataFrame:
         """Add n_duplicates of noisey entries to the sampled data,
         under assumption of Gaussian distribution of noise, given by 1-sigma
         argument.
+
+        Two key scenarios:
+            a.) thermal noise dominated: noise is independent of signal
+            b.) shot noise dominated: noise is proportional to sqr. root of
+                signal.
+        
+        Data is always in Reflectance units, but the instrument signal is the
+        product of the reflectance, illumination and instrument sensitivity. The
+        instrument sensitivity has a spectral dependence. The instrument channel
+        sensitivity may be controlled by setting independent exposure times for
+        each channel. 
+        
+        Here, this information may be encoded in the spectral Signal-to-Noise
+        Ratio vector (snr), or in an spd (spectral power distribution) vector,
+        that scales the reflectance data to give the spectral variation of the
+        instrument signal, as opposed to just the spectral variation of the 
+        target mineral.
 
         Note: key assumption is that each filter channel was captured optimally,
             i.e. with the same count level, and thus the same shot noise, and
@@ -191,14 +208,17 @@ class Observation():
             valid for typical natural illumination conditions, and thus the
             Poissonian shot noise can be approximated with a Gaussian.
 
-        :param snr: instrument signal-to-noise ratio
-        :type snr: float
         :param n_duplicates: number of noisy entries to add to the data
         :type n_duplicates: int
+        :param snr: instrument signal-to-noise ratio, either spectrally uniform
+            (float) or defined as a function of wavelength (np.array), defaults
+            to None
+        :type snr: Union[float, np.array]
         :param spd: the spectral power distribution over which the SNR is defined
         :type spd: np.array
-        :param apply: apply the noise to the object main_df, defaults to True
-        :type apply: bool
+        :param seed: Seed for random number generator for repeatability, 
+            defaults to None
+        :type seed: int
         :return: the main dataframe
         :type return: pd.DataFrame
         """
@@ -231,14 +251,19 @@ class Observation():
             if len(snr) != len(self.chnl_lbls):
                 raise ValueError("SNR array length does not match number of entries")
         
-        if spd is None:
-            noise = obs_df[self.wvls].to_numpy()/snr        
+        if isinstance(spd, float) and isinstance(snr, np.ndarray):
+            # all spectral noise dependence is included in the SNR, and the
+            # the reflectance signal spectral variation is considered negligible,
+            # and the noise is considered signal independent
+            noise = np.divide(spd, snr)
+        if isinstance(spd, np.ndarray):
+            # the noise is signal dependent and shot-noise dominated, and the
+            # spd encodes the spectral signal dependence.
+            noise = np.divide(np.sqrt(spd*obs_df[self.wvls].to_numpy()), snr)
         else:
-            # assume that the SNR is defined observations with relfectance given
-            # by the values of the SPD in each channel. Scale the reflectance
-            # noise according to the signal expected in each channel relative
-            # to this.
-            noise = np.divide(np.sqrt(obs_df[self.wvls].to_numpy()), snr)
+            # the noise is shot dominated, and the spectral dependence is
+            # encoded in the SNR vector.
+            noise = np.divide(obs_df[self.wvls].to_numpy(), snr)
 
         if seed is not None:
             np.random.seed(seed) # set the seed of the random distribution

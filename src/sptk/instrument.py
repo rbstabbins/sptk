@@ -585,7 +585,7 @@ class Instrument():
         # put the legend below the plot, and make horizontal
         fltr_ax.legend(*new_label_params,
                 loc='upper center', bbox_to_anchor=(0.5, -0.25),
-                ncols=n_ids, frameon=False,
+                ncols=n_ids/2, frameon=False,
                 fontsize=cfg.LEGEND_S-2.5)
                
         if self.filter_ids[0][0] == 'S':
@@ -803,7 +803,7 @@ class Instrument():
             autoscale_on=False)
 
         # set the y axis to log scale
-        snr_ax.set_yscale('log')
+        # snr_ax.set_yscale('log')
 
         # get colour palette from the filter colours DataFrame
         cwl_colours = self.filter_cols.to_numpy()        

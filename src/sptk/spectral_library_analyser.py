@@ -1097,6 +1097,10 @@ class SpectralLibraryAnalyser():
                 else:
                     col_n = (s-(sf*fig_rows[sf-1]*n_cols))//fig_rows[sf]
                 
+                # if only one row, then subfigs is 1D array
+                if subfigs[sf].ndim == 1:
+                    subfigs[sf] = np.array([subfigs[sf]])
+
                 scope_fig, ax = self.setup_plot(
                     scope_df, 
                     groupby, 

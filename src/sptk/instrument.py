@@ -526,7 +526,7 @@ class Instrument():
         else:
             cwls = self.cwls().to_numpy()
             filter_ids = self.filter_ids
-            fwhms = self.fwhms().unique()
+            fwhms = self.fwhms().to_numpy()
                 
         sns.lineplot(
             data=trans_df,
@@ -586,7 +586,7 @@ class Instrument():
         fltr_ax.legend(*new_label_params,
                 loc='upper center', bbox_to_anchor=(0.5, -0.25),
                 ncols=n_ids, frameon=False,
-                fontsize=cfg.LEGEND_S)
+                fontsize=cfg.LEGEND_S-2.5)
                
         if self.filter_ids[0][0] == 'S':
             # insert '...' between labels
@@ -608,7 +608,7 @@ class Instrument():
             plt.tight_layout()
             output_file = Path(self.object_dir, self.name).with_suffix(cfg.PLT_FRMT)
             fig.savefig(output_file)
-            print('Plots exported to '+str(Path(self.object_dir)))
+            print('Plots exported to '+str(Path(self.object_dir))) 
 
         return fig, fltr_ax
 

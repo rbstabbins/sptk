@@ -42,6 +42,15 @@ HEADER_LIST = [
     'Database of Origin' # the database from which the sample was sourced
     ] 
 
+def header_template() -> Dict:
+    """Helper function that creates a template dictionary for the metadata 
+    header of a material entry.
+
+    :return: dictionary with keys from HEADER_LIST and values set to None
+    :rtype: Dict
+    """
+    return {key: None for key in HEADER_LIST}
+
 class MaterialCollection():
     """Hosts material reflectance data and auxilary information in a DataFrame.
     """
@@ -241,7 +250,7 @@ class MaterialCollection():
                 if not isinstance(label_file_specifier, list):
                     label_file_specifier = [label_file_specifier]
                 # add '.csv' to the end of the specifier
-                label_filenames = [f + 'csv' for f in label_file_specifier]
+                label_filenames = [f + '.csv' for f in label_file_specifier]
 
                 # search for each of the label filenames in the directories
                 # and subdirectories under the label_dir
@@ -1017,3 +1026,101 @@ class MaterialCollection():
         colour_spectra_obj = plotter.compute_colour(illuminant)        
         fig = plotter.render_colour(colour_spectra_obj)
         return colour_spectra_obj, fig
+
+class MaterialCollectionBuilder():
+    """A class for building a MaterialCollection compatible spectral library
+    composed of material spectral reflectance data csv files.
+    """    
+    def __init__(self,
+            spectral_library: str)-> None:
+        """Initialise the MaterialCollectionBuilder object.
+        """
+        self.spectral_library = spectral_library
+
+        # create the spectral library directory if it doesn't exist
+        self.lib_path = Path(cfg.DATA_DIRECTORY / 'spectral_library' / self.spectral_library)
+        self.lib_path.mkdir(parents=True, exist_ok=True)
+
+        # map out the spectral library
+        # get the list of groups in the library
+        self.map = self.map_spectral_library()
+
+    def map_spectral_library(self) -> Dict:
+        """Map out the directory structure of the spectral library, and build
+        a dictionary representation of the library.
+        """
+        group_list = [p.name for p in self.lib_path.iterdir() if p.is_dir()]
+        self.spectral_library_dict_map = {}
+        for group in group_list:
+            group_path = Path(self.lib_path / group)
+            # get the list of subgroups in the group
+            subgroup_list = [p.name for p in group_path.iterdir() if p.is_dir()]
+            self.spectral_library_dict_map[group] = {}
+            for subgroup in subgroup_list:
+                subgroup_path = Path(group_path / subgroup)
+                # get the list of species in the subgroup
+                species_list = [p.name for p in subgroup_path.iterdir() if p.is_dir()]
+                self.spectral_library_dict_map[group][subgroup] = {}
+                for species in species_list:
+                    species_path = Path(subgroup_path / species)
+                    self.spectral_library_dict_map[group][subgroup][species] = {}
+                    # get the list of material files in the species
+                    material_file_list = [str(p) for p in species_path.iterdir() if p.is_file() and p.suffix == '.csv']
+                    for material_file in material_file_list:                                                
+                        sample_id = Path(material_file).stem
+                        self.spectral_library_dict_map[group][subgroup][species][sample_id] = material_file
+        
+        return self.spectral_library_dict_map
+                    
+    def add_material(self,
+            header: dict,
+            data: pd.Series
+            ) -> Path:
+        """ Create a new material entry in the spectarl library by parsing 
+        header and data information, and writing to the appropriate location
+
+        :param header: dictionary of header information for the material, with
+            keys as specified in HEADER_LIST
+        :type header: dict
+        :param data: series of reflectance data for the material
+        :type data: pd.Series
+        :return: filepath of the built material file
+        :rtype: Path
+        """
+
+        # build the directory tree where needed
+        if header['Library'] is None:
+            raise ValueError('Library name must be specified.')
+        if header['Species'] is None:
+            raise ValueError('Species name must be specified.')
+        # use the species name if subgroup or group not given
+        if header['Subgroup'] is None:
+            header['Subgroup'] = header['Species']
+        if header['Group'] is None:
+            header['Group'] = header['Species']
+
+        lib_path = Path(cfg.DATA_DIRECTORY / 'spectral_library' / header['Library'])
+        lib_path.mkdir(parents=True, exist_ok=True)
+
+        group_path = Path(lib_path / header['Group'])
+        group_path.mkdir(parents=True, exist_ok=True)
+
+        subgroup_path = Path(group_path / header['Subgroup'])
+        subgroup_path.mkdir(parents=True, exist_ok=True)
+
+        species_path = Path(subgroup_path / header['Species'])
+        species_path.mkdir(parents=True, exist_ok=True)
+
+        sample_filepath = Path(species_path / header['Sample ID']).with_suffix('.csv')
+
+        # make a pandas series of the information
+        header_series = pd.Series(index=HEADER_LIST, dtype='str')
+        
+        # concat the header information and the reflectance data
+        material_entry = pd.concat([pd.Series(header), pd.Series({'Wavelength': 'Response'}), data])
+
+        # write the material entry to the species filepath
+        material_entry.to_csv(sample_filepath, header=False)
+
+        return sample_filepath
+        

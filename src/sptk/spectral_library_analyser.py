@@ -1315,7 +1315,7 @@ class SpectralLibraryAnalyser():
     # waterfall Visualisation & Continuum Removal
     # """
 
-    def remove_continuum(self, plot: bool=False):
+    def remove_continuum(self, normalize: bool=False,plot: bool=False):
         """Remove the continuum from all spectra, and overwrite the local copy
         of the spectra object reflectance data.
         """
@@ -1332,7 +1332,8 @@ class SpectralLibraryAnalyser():
             wvls = spectrum.index
             try:
                 schq = spectro.SpectrumConvexHullQuotient(spectrum.tolist(),
-                                                                 wvls.tolist())
+                                                                 wvls.tolist(),
+                                                                 normalize=normalize)
                 # TODO investigate: 1. why some entries are skipped,
                 # TODO              2. why some hull fitting routines fail.
             except (ValueError, TypeError) as error:

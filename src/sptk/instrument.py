@@ -803,7 +803,7 @@ class Instrument():
             autoscale_on=False)
 
         # set the y axis to log scale
-        # snr_ax.set_yscale('log')
+        snr_ax.set_yscale('log')
 
         # get colour palette from the filter colours DataFrame
         cwl_colours = self.filter_cols.to_numpy()        

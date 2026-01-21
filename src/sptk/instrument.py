@@ -1123,6 +1123,8 @@ class InstrumentBuilder:
             fwhm_si = 2.0
         elif self.sampling == 'hi-res':
             fwhm_si = 0.3
+        elif self.sampling == '3xnyquist':
+            fwhm_si = 0.5/3
         else:
             raise ValueError('Sampling criteria not recognised')
 

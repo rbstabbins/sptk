@@ -393,7 +393,7 @@ class SpectralLibraryAnalyser():
             units=units,
             estimator=estimator,
             errorbar=errobar,
-            lw=0.5, 
+            lw=0.8, 
             ax=ax)
 
         # format axes
@@ -430,7 +430,7 @@ class SpectralLibraryAnalyser():
             ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(100))
         elif spec_range <= 5000:
             ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(100))
-            ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(500))
+            ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(200))
         else:
             ax.get_xaxis().set_minor_locator(mpl.ticker.MultipleLocator(500))
             ax.get_xaxis().set_major_locator(mpl.ticker.MultipleLocator(1000))
@@ -660,6 +660,31 @@ class SpectralLibraryAnalyser():
             n_spacers = data_df[data_df['Root Data ID'] == eg_root_data_id].shape[0]
         else:
             n_spacers = 1
+
+        # set plot limits        
+        wvl_lo = self.spectra_obj.wvls[0]
+        wvl_hi = self.spectra_obj.wvls[-1]
+
+        # convert data from arbitrary gridding of the spectra to a regular grid
+        # this moves the arbitrarily spaced channels of the given Instrument
+        # to the regular gridding of the simulation - usually 1 nm.
+        # get the number of samples
+        if self.obj_type == 'observation':            
+            n_lines = len(data)
+            lines = np.arange(0, n_lines, 1)
+            # create a regular grid
+            wvls_out = np.arange(wvl_lo, wvl_hi, cfg.SAMPLE_RES['delta_wvl'])
+            # create an out meshgrid
+            wvls_out, lines_out = np.meshgrid(wvls_out, lines)
+            # use regular interpolator to make use of rectilinear grid. i.e don't
+            # interpolate across samples, only across wavelengths
+            interp = interpolate.RegularGridInterpolator(
+                (lines, self.spectra_obj.wvls),
+                data)
+            data = interp((lines_out, wvls_out))
+
+        # if the data is from an Observation, then I want the interpolation to
+        # reflect the band widths...
             
         # get locations of each groupby label
         groupby_ticks = []
@@ -692,9 +717,7 @@ class SpectralLibraryAnalyser():
             id_label_y[id] = np.mean([lo, hi])
             id_ticks.append(lo)
 
-        # set plot limits        
-        wvl_lo = self.spectra_obj.wvls[0]
-        wvl_hi = self.spectra_obj.wvls[-1]
+
         # set up a good figure size so that good # of samples are shown per cm.
         # A4 = 210 x 297 mm
         # minus 3 cm for border
@@ -706,26 +729,6 @@ class SpectralLibraryAnalyser():
         cmap = plt.get_cmap('viridis')
         cmap.set_bad('black')
 
-        # convert data from arbitrary gridding of the spectra to a regular grid
-        # this moves the arbitrarily spaced channels of the given Instrument
-        # to the regular gridding of the simulation - usually 1 nm.
-        # get the number of samples
-        if self.obj_type == 'observation':            
-            n_lines = len(data)
-            lines = np.arange(0, n_lines, 1)
-            # create a regular grid
-            wvls_out = np.arange(wvl_lo, wvl_hi, cfg.SAMPLE_RES['delta_wvl'])
-            # create an out meshgrid
-            wvls_out, lines_out = np.meshgrid(wvls_out, lines)
-            # use regular interpolator to make use of rectilinear grid. i.e don't
-            # interpolate across samples, only across wavelengths
-            interp = interpolate.RegularGridInterpolator(
-                (lines, self.spectra_obj.wvls),
-                data)
-            data = interp((lines_out, wvls_out))
-
-        # if the data is from an Observation, then I want the interpolation to
-        # reflect the band widths...
 
         # draw plot
         im = ax.imshow(
@@ -1301,11 +1304,14 @@ class SpectralLibraryAnalyser():
         # pdf output
         output_file = Path(out_dir, filename).with_suffix('.pdf')
         fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='pdf')
-
+        print(f"Profile plot exported to {output_file}")
+        
         # svg output
         plt.rcParams['svg.fonttype'] = 'none'
         output_file = Path(out_dir, filename).with_suffix('.svg')
         fig.savefig(output_file, bbox_inches='tight', pad_inches = 0, format='svg')
+        print(f"Profile plot exported to {output_file}")
+        
     
         # force show of the plot?
 

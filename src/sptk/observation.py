@@ -1021,13 +1021,14 @@ class Observation():
 
         # export to envi sli file
         envi_sli_file = Path(table_dir, f'{name}')
-
+        
         header = {
-                'wavelength': self.instrument.cwls().to_numpy(), # np.ndarray of len n_bands,
-                'fwhm': self.instrument.fwhms().to_numpy(), # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
+                'wavelength': self.instrument.cwls().to_numpy()/1000, # np.ndarray of len n_bands,
+                'fwhm': self.instrument.fwhms().to_numpy()/1000, # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
                 'spectra names': self.main_df.index.to_list(), # use the data ids of the material collection
-                'wavelength units': 'nm' # the wavelength units used here.
+                'wavelength units': 'Micrometers' # the wavelength units used here.
             }
+
         spectra = self.get_refl_df().to_numpy()
         obs_sli = envi.SpectralLibrary(data=spectra, header=header)
         obs_sli.save(str(envi_sli_file))

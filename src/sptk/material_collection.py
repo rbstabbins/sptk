@@ -63,6 +63,7 @@ class MaterialCollection():
             balance_classes: bool=True,
             random_bias_seed: int = None,
             allow_out_of_bounds: bool=False,
+            extrapolate: bool=False,
             load_existing: bool = cfg.LOAD_EXISTING,
             plot_profiles: bool = cfg.PLOT_PROFILES,
             export_df: bool = cfg.EXPORT_DF) -> None:
@@ -91,6 +92,8 @@ class MaterialCollection():
         :param allow_out_of_bounds: Instruct whether to include entries with
             wavelengths that do not cover the full range, defaults to False.
         :type allow_out_of_bounds: bool, optional
+        :param extrapolate: whether to extrapolate out-of-bounds values, defaults to False
+        :type extrapolate: bool, optional
         :param load_existing: instruct to use or overwrite existing directories
             and files of the same project_name, defaults to config.py setting.
         :type load_existing: bool, optional
@@ -114,6 +117,7 @@ class MaterialCollection():
         self.categories = list(self.material_file_dict.keys())
         self.wvls = cfg.WVLS
         self.allow_out_of_bounds = allow_out_of_bounds
+        self.extrapolate = extrapolate
         self.header_list = HEADER_LIST
 
         self.noisy = False # generally not used for a Material Collection
@@ -288,7 +292,7 @@ class MaterialCollection():
             print("└──species|subgroup|group|")
             print("   └──data_id status")
             for filepath in load_bar:  # for each file, load_material
-                new_entry = MaterialCollection.load_material(filepath)
+                new_entry = MaterialCollection.load_material(filepath, extrapolate=self.extrapolate)
                 # extract data id, species, subgroup, group and library
                 path_parts = list(Path(filepath).parts)
                 data_id = path_parts[-1]
@@ -398,14 +402,16 @@ class MaterialCollection():
         return empt_df
 
     @staticmethod
-    def load_material(filepath: str) -> pd.DataFrame:
+    def load_material(filepath: str, extrapolate: bool=False) -> pd.DataFrame:
         """Access material file in the sptk spectral library, and parse data
         into DataFrame suitable for appending to master dataframe.
 
         notation: 'mtrl' is 'material'
 
-        :param material_filepath: filepath location of the material
-        :type material_filepath: str
+        :param filepath: filepath location of the material
+        :type filepath: str
+        :param extrapolate: whether to extrapolate out-of-bounds values
+        :type extrapolate: bool, optional
         :return: material reflectance data and metadata
         :rtype: pd.DataFrame
         """
@@ -424,7 +430,10 @@ class MaterialCollection():
         # perform interpolation; put NaN in bad values
         refl_in = mtrl_refl_in.to_numpy().astype('float64')        
         refl_in = np.reshape(refl_in, len(refl_in))
-        refl_func = interp1d(wvls_in, refl_in, bounds_error=False)
+        if extrapolate:
+            refl_func = interp1d(wvls_in, refl_in, bounds_error=False, fill_value=(refl_in[0], refl_in[-1]))
+        else:
+            refl_func = interp1d(wvls_in, refl_in, bounds_error=False, fill_value=np.nan)
         refl_interp = refl_func(cfg.WVLS)
         refl_series = pd.Series(data=refl_interp, index=cfg.WVLS)
 
@@ -894,10 +903,10 @@ class MaterialCollection():
         # export to envi sli file
         envi_sli_file = Path(table_path, 'material_collection')        
         header = {
-                'wavelength': self.wvls, # np.ndarray of len n_bands,
-                'fwhm': np.empty(len(self.wvls)).fill(3.0), # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
+                'wavelength': self.wvls/1000, # np.ndarray of len n_bands,
+                'fwhm': np.empty(len(self.wvls)).fill(3.0/1000), # typically this information is poorly supplied, so let's estimate with 3 nm for high-resolution spectral library data.
                 'spectra names': self.main_df.index.to_list(), # use the data ids of the material collection
-                'wavelength units': 'nm' # the wavelength units used here.
+                'wavelength units': 'Micrometers' # the wavelength units used here.
             }
         spectra = self.get_refl_df().to_numpy()
         obs_sli = envi.SpectralLibrary(data=spectra, header=header)
